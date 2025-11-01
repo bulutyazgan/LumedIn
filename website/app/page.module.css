@@ -34,6 +34,68 @@
   margin: 0.5rem 0 0 0;
 }
 
+/* Progress Section */
+.progressSection {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 12px;
+  margin-bottom: 2rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.progressSection h3 {
+  margin: 0 0 1rem 0;
+  color: #333;
+  font-size: 1.2rem;
+}
+
+.progressBar {
+  width: 100%;
+  height: 24px;
+  background: #e9ecef;
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 1rem;
+}
+
+.progressFill {
+  height: 100%;
+  transition: width 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.progressStats {
+  display: flex;
+  gap: 1.5rem;
+  font-size: 0.95rem;
+}
+
+.progressCompleted {
+  color: #4caf50;
+  font-weight: 600;
+}
+
+.progressPending {
+  color: #ff9800;
+  font-weight: 600;
+}
+
+.progressFailed {
+  color: #f44336;
+  font-weight: 600;
+}
+
+.progressTotal {
+  color: #666;
+  font-weight: 600;
+  margin-left: auto;
+}
+
 .loading,
 .error,
 .noData {
@@ -132,6 +194,7 @@
   padding: 1rem;
   border-bottom: 1px solid #e9ecef;
   color: #666;
+  vertical-align: top;
 }
 
 .table tbody tr:hover {
@@ -146,4 +209,199 @@
 
 .table a:hover {
   text-decoration: underline;
+}
+
+/* Profile Photo */
+.profilePhoto {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.noPhoto {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #e9ecef;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+}
+
+/* Expand Button */
+.expandBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px 8px;
+  color: #667eea;
+  transition: transform 0.2s;
+}
+
+.expandBtn:hover {
+  transform: scale(1.2);
+}
+
+/* Headline */
+.headline {
+  max-width: 300px;
+  font-style: italic;
+  color: #555;
+}
+
+/* Status Badges */
+.status {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.status.pending {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.status.completed {
+  background: #d4edda;
+  color: #155724;
+}
+
+.status.failed {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.status.no_linkedin {
+  background: #e9ecef;
+  color: #6c757d;
+}
+
+/* Socials */
+.socials {
+  display: flex;
+  gap: 8px;
+}
+
+.socials a {
+  padding: 4px 8px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  transition: background 0.2s;
+}
+
+.socials a:hover {
+  background: #e9ecef;
+}
+
+.smallLink {
+  font-size: 0.85rem;
+  color: #999 !important;
+}
+
+/* Expanded Content */
+.expanded {
+  background: #f8f9fa;
+}
+
+.expandedContent {
+  background: #f8f9fa !important;
+}
+
+.expandedContent td {
+  padding: 0 !important;
+}
+
+.detailsContainer {
+  padding: 1.5rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+.detailSection {
+  background: white;
+  padding: 1rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.detailSection h4 {
+  margin: 0 0 1rem 0;
+  color: #333;
+  font-size: 1rem;
+  border-bottom: 2px solid #667eea;
+  padding-bottom: 0.5rem;
+}
+
+.detailSection p {
+  margin: 0;
+  color: #666;
+  line-height: 1.6;
+}
+
+.experienceItem,
+.educationItem,
+.certificationItem,
+.activityItem {
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.experienceItem:last-child,
+.educationItem:last-child,
+.certificationItem:last-child,
+.activityItem:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.experienceItem strong,
+.educationItem strong,
+.certificationItem strong {
+  color: #333;
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.meta {
+  font-size: 0.85rem;
+  color: #999;
+}
+
+.more {
+  margin: 0.5rem 0 0 0;
+  color: #667eea;
+  font-size: 0.9rem;
+  font-style: italic;
+}
+
+.activityItem a {
+  color: #667eea;
+  font-weight: 500;
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+/* Loading Animation */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.loading {
+  animation: pulse 1.5s ease-in-out infinite;
+  color: #999;
+  font-style: italic;
 }
