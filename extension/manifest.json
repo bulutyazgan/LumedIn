@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "Luma Attendee Analyzer",
+  "version": "1.0.0",
+  "description": "Analyze Luma event attendees and export their social profiles to CSV",
+  "permissions": [
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://lu.ma/*",
+    "https://luma.com/*",
+    "https://*.lu.ma/*",
+    "https://*.luma.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://lu.ma/*", "https://luma.com/*", "https://*.lu.ma/*", "https://*.luma.com/*"],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_end"
+    }
+  ],
+  "icons": {
+    "128": "icon128.png"
+  }
+}

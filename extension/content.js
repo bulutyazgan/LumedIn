@@ -1,0 +1,260 @@
+// Content script for Luma Attendee Analyzer Chrome Extension
+// This script injects an "Analyze Attendees" button on Luma event pages
+
+(function() {
+  'use strict';
+
+  console.log('Luma Analyzer: Content script loaded');
+
+  // Only run on event pages - Luma events have short URLs like /jrec73nt
+  // Skip homepage, calendar pages, and other non-event pages
+  const path = window.location.pathname;
+  if (path === '/' || path.startsWith('/calendar') || path.startsWith('/discover') || path.startsWith('/create')) {
+    console.log('Luma Analyzer: Not an event page, skipping');
+    return;
+  }
+
+  // Wait for page to load and check if it's an event page
+  function waitForGuestsButton() {
+    return new Promise((resolve) => {
+      const checkInterval = setInterval(() => {
+        const guestsButton = document.querySelector('.guests-button') ||
+                           document.querySelector('[class*="guest"]') ||
+                           document.querySelector('button[class*="Guest"]');
+
+        if (guestsButton || document.readyState === 'complete') {
+          clearInterval(checkInterval);
+          resolve(!!guestsButton);
+        }
+      }, 500);
+
+      // Timeout after 10 seconds
+      setTimeout(() => {
+        clearInterval(checkInterval);
+        resolve(false);
+      }, 10000);
+    });
+  }
+
+  waitForGuestsButton().then(isEventPage => {
+    if (isEventPage) {
+      console.log('Luma Analyzer: Event page detected, initializing...');
+      initializeAnalyzer();
+    } else {
+      console.log('Luma Analyzer: No guests button found, not an event page');
+    }
+  });
+
+  function initializeAnalyzer() {
+    // Check if button already exists
+    if (document.getElementById('luma-analyzer-button')) {
+      console.log('Luma Analyzer: Button already exists');
+      return;
+    }
+
+    // Create the analyze button
+    const analyzeButton = document.createElement('button');
+    analyzeButton.id = 'luma-analyzer-button';
+    analyzeButton.className = 'luma-analyzer-btn';
+    analyzeButton.textContent = 'Conduct Analysis';
+    analyzeButton.title = 'Analyze attendees and export to CSV';
+
+    // Add click handler
+    analyzeButton.addEventListener('click', async () => {
+      analyzeButton.disabled = true;
+      analyzeButton.textContent = 'Analyzing...';
+
+      try {
+        await analyzeAttendees();
+        analyzeButton.textContent = 'Analysis Complete!';
+        setTimeout(() => {
+          analyzeButton.textContent = 'Conduct Analysis';
+          analyzeButton.disabled = false;
+        }, 3000);
+      } catch (error) {
+        console.error('Analysis failed:', error);
+        alert('Analysis failed: ' + error.message);
+        analyzeButton.textContent = 'Analysis Failed';
+        analyzeButton.style.backgroundColor = '#ef4444';
+        setTimeout(() => {
+          analyzeButton.textContent = 'Conduct Analysis';
+          analyzeButton.style.backgroundColor = '';
+          analyzeButton.disabled = false;
+        }, 3000);
+      }
+    });
+
+    // Inject the button
+    injectButton(analyzeButton);
+  }
+
+  function injectButton(button) {
+    // Create a wrapper div for better positioning
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = `
+      position: fixed;
+      top: 80px;
+      right: 20px;
+      z-index: 10000;
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    `;
+    wrapper.appendChild(button);
+    document.body.appendChild(wrapper);
+    console.log('Luma Analyzer: Button injected successfully');
+  }
+
+  // Main analysis function (converted from your original script)
+  async function analyzeAttendees() {
+    console.log('Starting Luma attendee analysis...');
+
+    // 1. Click the guests button to open the guests list
+    const guestsButton = document.querySelector('.guests-button') ||
+                        document.querySelector('[class*="guest"]') ||
+                        document.querySelector('button[class*="Guest"]');
+
+    if (!guestsButton) {
+      throw new Error('Guests button not found! Make sure you are on a Luma event page.');
+    }
+
+    console.log('Clicking guests button...');
+    guestsButton.click();
+
+    // Wait for the guests list to appear
+    await new Promise(r => setTimeout(r, 1500));
+
+    // 2. Find the guests list container and collect attendee links
+    // Try multiple selectors for the guests list
+    let guestsList = document.querySelector('.outer.overflow-auto') ||
+                     document.querySelector('[class*="guest"][class*="list"]') ||
+                     document.querySelector('[class*="attendee"]') ||
+                     document.querySelector('[role="dialog"] [class*="overflow"]');
+
+    if (!guestsList) {
+      throw new Error('Guests list not found! The popup may not have opened. Try clicking the guests button manually first.');
+    }
+
+    console.log('Found guests list, collecting attendees...');
+
+    // Look for user profile links
+    const attendeeLinks = Array.from(guestsList.querySelectorAll('a[href*="/user/"]')) ||
+                         Array.from(guestsList.querySelectorAll('a[href^="/"]')).filter(a => a.href.includes('/user/'));
+
+    const seen = new Set();
+    const attendees = [];
+    for (const link of attendeeLinks) {
+      const url = link.href.startsWith('http') ? link.href : (location.origin + link.getAttribute('href'));
+      if (seen.has(url)) continue;
+      seen.add(url);
+
+      const name = link.textContent.trim();
+      if (name && url.includes('/user/')) {
+        attendees.push({
+          name: name,
+          profileUrl: url
+        });
+      }
+    }
+
+    if (attendees.length === 0) {
+      throw new Error('No attendees found! The page structure may have changed.');
+    }
+
+    console.log(`Found ${attendees.length} unique attendees`);
+
+    // Helper to fetch and parse social links from a profile page
+    async function getSocialLinks(profileUrl) {
+      try {
+        const res = await fetch(profileUrl, { credentials: 'include' });
+        const html = await res.text();
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const socialLinks = Array.from(doc.querySelectorAll('.social-links a'));
+        const result = {
+          instagram: '',
+          x: '',
+          tiktok: '',
+          linkedin: '',
+          website: ''
+        };
+        for (const a of socialLinks) {
+          const href = a.href;
+          if (/instagram\.com/i.test(href)) result.instagram = href;
+          else if (/twitter\.com|x\.com/i.test(href)) result.x = href;
+          else if (/tiktok\.com/i.test(href)) result.tiktok = href;
+          else if (/linkedin\.com/i.test(href)) result.linkedin = href;
+          else if (!/lumacdn\.com|lu\.ma|luma\.com/i.test(href)) result.website = href;
+        }
+        return result;
+      } catch (e) {
+        console.error(`Failed to fetch ${profileUrl}:`, e);
+        return {
+          instagram: '',
+          x: '',
+          tiktok: '',
+          linkedin: '',
+          website: ''
+        };
+      }
+    }
+
+    // 3. Process attendees in parallel batches for speed
+    const BATCH_SIZE = 10;
+    const results = [];
+
+    for (let i = 0; i < attendees.length; i += BATCH_SIZE) {
+      const batch = attendees.slice(i, i + BATCH_SIZE);
+      console.log(`Processing batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(attendees.length / BATCH_SIZE)} (${batch.length} attendees)...`);
+
+      const batchResults = await Promise.all(
+        batch.map(async (attendee) => {
+          const socials = await getSocialLinks(attendee.profileUrl);
+          console.log(`✓ ${attendee.name}`);
+          return {
+            name: attendee.name,
+            profileUrl: attendee.profileUrl,
+            ...socials
+          };
+        })
+      );
+
+      results.push(...batchResults);
+
+      // Small delay between batches
+      if (i + BATCH_SIZE < attendees.length) {
+        await new Promise(r => setTimeout(r, 200));
+      }
+    }
+
+    // 4. Build CSV rows
+    const rows = [
+      ['Name', 'Profile URL', 'Instagram', 'X', 'TikTok', 'LinkedIn', 'Website']
+    ];
+    for (const result of results) {
+      rows.push([
+        result.name,
+        result.profileUrl,
+        result.instagram,
+        result.x,
+        result.tiktok,
+        result.linkedin,
+        result.website
+      ]);
+    }
+
+    console.log(`✓ Processed all ${attendees.length} attendees!`);
+
+    // 5. Download as CSV
+    const csv = rows.map(r => r.map(x => `"${(x||'').replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], {type: 'text/csv'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `luma_attendees_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    console.log('CSV download initiated!');
+  }
+})();
