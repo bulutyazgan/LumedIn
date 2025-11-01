@@ -25,9 +25,12 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchData = async () => {
+  const fetchData = async (preserveScrollPosition = false) => {
     try {
-      setLoading(true);
+      // Only show loading on initial load, not on auto-refresh
+      if (!preserveScrollPosition) {
+        setLoading(true);
+      }
       const response = await fetch('/api/attendees');
       if (!response.ok) {
         throw new Error('Failed to fetch attendee data');
@@ -38,14 +41,16 @@ export default function Dashboard() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
-      setLoading(false);
+      if (!preserveScrollPosition) {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
     fetchData();
     // Auto-refresh every 5 seconds to catch new data
-    const interval = setInterval(fetchData, 5000);
+    const interval = setInterval(() => fetchData(true), 5000);
     return () => clearInterval(interval);
   }, []);
 
