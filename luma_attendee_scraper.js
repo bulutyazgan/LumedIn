@@ -1,6 +1,23 @@
 (async function() {
-  // 1. Collect attendee links and deduplicate by profile URL
-  const attendeeLinks = Array.from(document.querySelectorAll('a[href^="/user/"]'));
+  // 1. Click the guests button to open the guests list
+  const guestsButton = document.querySelector('.guests-button');
+  if (!guestsButton) {
+    console.error('Guests button not found! Make sure you are on a Luma event page.');
+    return;
+  }
+  guestsButton.click();
+
+  // Wait for the guests list to appear
+  await new Promise(r => setTimeout(r, 1000));
+
+  // 2. Find the guests list container and collect attendee links
+  const guestsList = document.querySelector('.outer.overflow-auto');
+  if (!guestsList) {
+    console.error('Guests list not found! The popup may not have opened.');
+    return;
+  }
+
+  const attendeeLinks = Array.from(guestsList.querySelectorAll('a[href^="/user/"]'));
   const seen = new Set();
   const attendees = [];
   for (const link of attendeeLinks) {
@@ -12,6 +29,8 @@
       profileUrl: url
     });
   }
+
+  console.log(`Found ${attendees.length} unique attendees`);
 
   // 2. Helper to fetch and parse social links from a profile page
   async function getSocialLinks(profileUrl) {
@@ -47,27 +66,54 @@
     }
   }
 
-  // 3. Process all attendees, one at a time to avoid rate limits
+  // 3. Process attendees in parallel batches for speed
+  const BATCH_SIZE = 10; // Process 10 attendees at a time
+  const results = [];
+
+  for (let i = 0; i < attendees.length; i += BATCH_SIZE) {
+    const batch = attendees.slice(i, i + BATCH_SIZE);
+    console.log(`Processing batch ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(attendees.length / BATCH_SIZE)} (${batch.length} attendees)...`);
+
+    // Process all attendees in this batch in parallel
+    const batchResults = await Promise.all(
+      batch.map(async (attendee) => {
+        const socials = await getSocialLinks(attendee.profileUrl);
+        console.log(`✓ ${attendee.name}`);
+        return {
+          name: attendee.name,
+          profileUrl: attendee.profileUrl,
+          ...socials
+        };
+      })
+    );
+
+    results.push(...batchResults);
+
+    // Small delay between batches to be polite to the server
+    if (i + BATCH_SIZE < attendees.length) {
+      await new Promise(r => setTimeout(r, 200));
+    }
+  }
+
+  // 4. Build CSV rows
   const rows = [
     ['Name', 'Profile URL', 'Instagram', 'X', 'TikTok', 'LinkedIn', 'Website']
   ];
-  for (const attendee of attendees) {
-    const socials = await getSocialLinks(attendee.profileUrl);
+  for (const result of results) {
     rows.push([
-      attendee.name,
-      attendee.profileUrl,
-      socials.instagram,
-      socials.x,
-      socials.tiktok,
-      socials.linkedin,
-      socials.website
+      result.name,
+      result.profileUrl,
+      result.instagram,
+      result.x,
+      result.tiktok,
+      result.linkedin,
+      result.website
     ]);
-    // Optional: show progress
-    console.log(`Processed: ${attendee.name}`);
-    await new Promise(r => setTimeout(r, 500)); // polite delay
   }
 
-  // 4. Download as CSV
+  console.log(`✓ Processed all ${attendees.length} attendees!`);
+
+  // 5. Download as CSV
   const csv = rows.map(r => r.map(x => `"${(x||'').replace(/"/g, '""')}"`).join(',')).join('\n');
   const blob = new Blob([csv], {type: 'text/csv'});
   const a = document.createElement('a');
