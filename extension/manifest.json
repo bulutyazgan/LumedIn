@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Luma Attendee Analyzer",
   "version": "1.0.0",
-  "description": "Analyze Luma event attendees and export their social profiles to CSV",
+  "description": "Analyze Luma event attendees and send to dashboard",
   "permissions": [
     "activeTab"
   ],
@@ -10,7 +10,8 @@
     "https://lu.ma/*",
     "https://luma.com/*",
     "https://*.lu.ma/*",
-    "https://*.luma.com/*"
+    "https://*.luma.com/*",
+    "http://localhost:3000/*"
   ],
   "content_scripts": [
     {

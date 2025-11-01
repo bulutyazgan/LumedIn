@@ -57,7 +57,7 @@
     analyzeButton.id = 'luma-analyzer-button';
     analyzeButton.className = 'luma-analyzer-btn';
     analyzeButton.textContent = 'Conduct Analysis';
-    analyzeButton.title = 'Analyze attendees and export to CSV';
+    analyzeButton.title = 'Analyze attendees and send to dashboard';
 
     // Add click handler
     analyzeButton.addEventListener('click', async () => {
@@ -245,16 +245,36 @@
 
     console.log(`✓ Processed all ${attendees.length} attendees!`);
 
-    // 5. Download as CSV
-    const csv = rows.map(r => r.map(x => `"${(x||'').replace(/"/g, '""')}"`).join(',')).join('\n');
-    const blob = new Blob([csv], {type: 'text/csv'});
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `luma_attendees_${new Date().toISOString().split('T')[0]}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    // 5. Send data to dashboard API
+    const API_URL = 'http://localhost:3000/api/attendees';
 
-    console.log('CSV download initiated!');
+    try {
+      console.log('Sending data to dashboard...');
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          attendees: results,
+          eventUrl: window.location.href,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log('✓ Data sent successfully:', result);
+
+      // Open dashboard in new tab
+      window.open('http://localhost:3000', '_blank');
+      console.log('✓ Dashboard opened in new tab!');
+
+    } catch (error) {
+      console.error('Failed to send data to dashboard:', error);
+      throw new Error(`Failed to send data to dashboard: ${error.message}`);
+    }
   }
 })();
