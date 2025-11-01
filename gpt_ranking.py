@@ -36,7 +36,7 @@ CALIBRATION: Population of university students where median = 50, top 10% = 80+,
 5. Summary: If overall_score > 75, write one paragraph (3-4 sentences) summarizing interests and background. Otherwise, leave empty string."""
 
     response = client.chat.completions.parse(
-        model="gpt-4o-mini",
+        model="gpt-5-nano",
         messages=[{"role": "user", "content": prompt}],
         temperature=0.3,
         response_format=HackathonEvaluation
