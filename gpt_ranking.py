@@ -1,8 +1,19 @@
 from openai import OpenAI
-import json
+from pydantic import BaseModel, Field
+from typing import Optional, Union
 import time
 
 client = OpenAI(api_key="")
+
+class HackathonEvaluation(BaseModel):
+    university: str = Field(description="University name")
+    course: str = Field(description="Degree or major")
+    work_experience_count: int = Field(description="Total number of internships and jobs")
+    hackathons_won: Union[int, str] = Field(description="Number of hackathons won, or 'unavailable' if not mentioned")
+    technical_skill: int = Field(ge=1, le=100, description="Technical skill score 1-100")
+    collaboration: int = Field(ge=1, le=100, description="Collaboration score 1-100")
+    overall_score: int = Field(ge=1, le=100, description="Overall hackathon readiness score 1-100")
+    summary: str = Field(description="Paragraph summary if overall_score > 75, otherwise empty string")
 
 def score_candidate(profile_text):
     prompt = f"""Analyze this LinkedIn profile to evaluate hackathon partnership potential.
@@ -10,57 +21,41 @@ def score_candidate(profile_text):
 Profile:
 \"\"\"{profile_text}\"\"\"
 
-Extract and score the following:
+Extract and score:
 
-1. Parse their education (university name, degree/course) and work experience (count internships + jobs)
-2. Identify hackathon wins mentioned (count them, or note if unavailable)
-3. Score on 1-100 scale:
-   - Technical Skill: Depth of technical projects, languages, frameworks, system design. Calibrate assuming a population of university students where median = 50, top 10% = 80+, exceptional = 90+
-   - Collaboration: Teamwork indicators, leadership roles, group projects, communication ability. Same calibration.
-   - Overall: Holistic assessment of hackathon readiness combining technical + collaboration + execution track record. Same calibration.
-   
-   CRITICAL: Distribute scores to reflect percentile ranking. Avoid clustering around 70-80. Most candidates should fall 40-70 range, with only truly exceptional profiles scoring 85+.
+1. Education: university name and degree/course
+2. Work experience: count all internships + jobs
+3. Hackathons won: count if mentioned, otherwise use "unavailable"
+4. Scores (1-100 scale with percentile calibration):
+   - Technical Skill: Depth of technical projects, languages, frameworks, system design
+   - Collaboration: Teamwork indicators, leadership roles, group projects, communication ability
+   - Overall: Holistic hackathon readiness combining technical + collaboration + execution track record
 
-4. If overall score > 75: Write one paragraph (3-4 sentences) summarizing their interests and background.
+CALIBRATION: Population of university students where median = 50, top 10% = 80+, exceptional = 90+. Distribute scores across 40-70 range for most candidates. Only truly exceptional profiles score 85+. Avoid clustering around 70-80.
 
-Return strictly as JSON:
-{{
-  "university": "<name>",
-  "course": "<degree/major>",
-  "work_experience_count": <number>,
-  "hackathons_won": <number or "unavailable">,
-  "technical_skill": <1-100>,
-  "collaboration": <1-100>,
-  "overall_score": <1-100>,
-  "summary": "<paragraph if overall > 75, else empty string>"
-}}"""
+5. Summary: If overall_score > 75, write one paragraph (3-4 sentences) summarizing interests and background. Otherwise, leave empty string."""
 
-    response = client.chat.completions.create(
-        model="gpt-5-nano",
+    response = client.chat.completions.parse(
+        model="gpt-4o-mini",
         messages=[{"role": "user", "content": prompt}],
         temperature=0.3,
+        response_format=HackathonEvaluation
     )
-    content = response.choices[0].message.content.strip()
-    try:
-        result = json.loads(content)
-    except json.JSONDecodeError:
-        result = {"error": "Invalid JSON", "raw": content}
-    return result
-
+    
+    return response.choices[0].message.parsed
 
 def evaluate_all(candidates):
     results = []
     for i, candidate in enumerate(candidates, start=1):
-        print(f"Evaluating candidate {i}/{len(candidates)}: {candidate['name']}")
-        scores = score_candidate(candidate["profile_text"])
+        print(f"Evaluating {i}/{len(candidates)}: {candidate['name']}")
+        evaluation = score_candidate(candidate["profile_text"])
         results.append({
             "name": candidate["name"],
-            "scores": scores
+            "evaluation": evaluation.model_dump()
         })
-        # small delay to avoid rate limits
         time.sleep(1)
+    
     return results
-
 
 # Example usage:
 candidates = [
@@ -70,13 +65,22 @@ candidates = [
 
 results = evaluate_all(candidates)
 
-# Sort by total score
-ranked = sorted(results, key=lambda x: x["scores"].get("total_score", 0), reverse=True)
+# Sort by overall_score
+ranked = sorted(results, key=lambda x: x["evaluation"]["overall_score"], reverse=True)
 
 # Save to file
 with open("hackathon_rankings.json", "w") as f:
+    import json
     json.dump(ranked, f, indent=2)
 
-# Print top candidates
-for r in ranked:
-    print(f"{r['name']}: {r['scores'].get('total_score', '?')} — {r['scores'].get('reasoning', '')}")
+# Print rankings
+print("\n=== RANKINGS ===")
+for i, r in enumerate(ranked, 1):
+    e = r["evaluation"]
+    print(f"{i}. {r['name']}: {e['overall_score']}/100")
+    print(f"   Tech: {e['technical_skill']} | Collab: {e['collaboration']}")
+    print(f"   {e['university']} - {e['course']}")
+    print(f"   Experience: {e['work_experience_count']} | Hackathons Won: {e['hackathons_won']}")
+    if e['summary']:
+        print(f"   Summary: {e['summary']}")
+    print()
