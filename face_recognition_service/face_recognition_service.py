@@ -181,12 +181,13 @@ class FaceRecognitionService:
         return matches[:max_results]
 
 
+
 # Example usage
 if __name__ == "__main__":
     service = FaceRecognitionService(model_name="VGG-Face", distance_metric="cosine")
 
     results = service.find_all_matches(
-        target_image_path="./face_recognition_service/test_img2.jpg",
+        target_image_path="./face_recognition_service/test_img5.jpg",
         profiles_json_path="./sample_output.json",
         image_field="imageUrl"
     )
