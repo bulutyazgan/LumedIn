@@ -35,8 +35,5 @@ yarn-error.log*
 .DS_Store
 Thumbs.db
 
-# Test images
-face_recognition_service/test_images/
-
 # Face recognition temp files
 website/temp/
