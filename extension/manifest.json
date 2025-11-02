@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "LumedIn Analyzer",
-  "version": "1.0.2",
+  "version": "1.0.4",
   "description": "AI-powered event attendee analysis and networking insights for Luma events",
   "permissions": [
     "activeTab"
