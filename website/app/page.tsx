@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
+import { Camera, Download } from 'lucide-react';
+import Image from 'next/image';
 import styles from './page.module.css';
 import CameraModal from '@/components/CameraModal';
 import MatchResult from '@/components/MatchResult';
@@ -275,7 +277,16 @@ export default function Dashboard() {
   return (
     <div className={styles.container}>
       <header className={styles.header}>
-        <h1>Luma Attendee Dashboard</h1>
+        <div className={styles.headerTitle}>
+          <Image
+            src="/media/logo.png"
+            alt="LumedIn Logo"
+            width={48}
+            height={48}
+            className={styles.logo}
+          />
+          <h1>LumedIn</h1>
+        </div>
         {data?.eventUrl && (
           <p className={styles.eventUrl}>
             Event: <a href={data.eventUrl} target="_blank" rel="noopener noreferrer">{data.eventUrl}</a>
@@ -351,10 +362,10 @@ export default function Dashboard() {
                 disabled={faceMatchLoading}
                 title="Find by Face"
               >
-                📷
+                <Camera size={20} />
               </button>
               <button onClick={downloadCSV} className={styles.downloadBtn} title="Download CSV">
-                ⬇️
+                <Download size={20} />
               </button>
             </div>
           </div>

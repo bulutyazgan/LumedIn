@@ -1,0 +1,92 @@
+/* Theme Variables for LumedIn Analytics */
+
+:root[data-theme='dark'] {
+  --bg-primary: #0a0a0a;
+  --bg-secondary: rgba(18, 18, 18, 0.8);
+  --bg-tertiary: rgba(30, 30, 30, 0.5);
+  --text-primary: #ffffff;
+  --text-secondary: #d1d5db;
+  --text-tertiary: #9ca3af;
+  --text-quaternary: #6b7280;
+  --accent-purple: #8523cc;
+  --accent-purple-light: #a78bfa;
+  --border-color: rgba(255, 255, 255, 0.05);
+  --shadow-color: rgba(0, 0, 0, 0.3);
+
+  /* Gradient colors */
+  --gradient-start: rgba(133, 35, 204, 0.15);
+  --gradient-middle: rgba(133, 35, 204, 0.1);
+  --gradient-end: rgba(133, 35, 204, 0.08);
+}
+
+:root[data-theme='light'] {
+  --bg-primary: #ffffff;
+  --bg-secondary: rgba(249, 250, 251, 0.8);
+  --bg-tertiary: rgba(243, 244, 246, 0.5);
+  --text-primary: #111827;
+  --text-secondary: #374151;
+  --text-tertiary: #6b7280;
+  --text-quaternary: #9ca3af;
+  --accent-purple: #8523cc;
+  --accent-purple-light: #a78bfa;
+  --border-color: rgba(0, 0, 0, 0.1);
+  --shadow-color: rgba(0, 0, 0, 0.1);
+
+  /* Gradient colors */
+  --gradient-start: rgba(133, 35, 204, 0.08);
+  --gradient-middle: rgba(133, 35, 204, 0.05);
+  --gradient-end: rgba(133, 35, 204, 0.03);
+}
+
+/* Default to dark theme */
+:root {
+  --bg-primary: #0a0a0a;
+  --bg-secondary: rgba(18, 18, 18, 0.8);
+  --bg-tertiary: rgba(30, 30, 30, 0.5);
+  --text-primary: #ffffff;
+  --text-secondary: #d1d5db;
+  --text-tertiary: #9ca3af;
+  --text-quaternary: #6b7280;
+  --accent-purple: #8523cc;
+  --accent-purple-light: #a78bfa;
+  --border-color: rgba(255, 255, 255, 0.05);
+  --shadow-color: rgba(0, 0, 0, 0.3);
+  --gradient-start: rgba(133, 35, 204, 0.15);
+  --gradient-middle: rgba(133, 35, 204, 0.1);
+  --gradient-end: rgba(133, 35, 204, 0.08);
+}
+
+/* Theme Toggle Button */
+.theme-toggle-btn {
+  position: fixed;
+  top: 2rem;
+  right: 2rem;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  border: none;
+  background: var(--bg-secondary);
+  backdrop-filter: blur(20px);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  box-shadow: 0 4px 16px var(--shadow-color);
+  transition: all 0.3s ease;
+}
+
+.theme-toggle-btn:hover {
+  box-shadow: 0 6px 24px rgba(133, 35, 204, 0.3);
+}
+
+.theme-toggle-btn svg {
+  width: 20px;
+  height: 20px;
+  color: var(--text-primary);
+  transition: transform 0.3s ease;
+}
+
+.theme-toggle-btn:hover svg {
+  transform: rotate(20deg);
+}
