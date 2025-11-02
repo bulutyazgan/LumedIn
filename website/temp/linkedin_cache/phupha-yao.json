@@ -1,0 +1,61 @@
+{
+  "url": "https://linkedin.com/in/phupha-yao",
+  "cachedAt": "2025-11-02T12:17:01.916Z",
+  "profile": {
+    "profile_photo": "https://media.licdn.com/dms/image/v2/D4D03AQEGX7n0x-9MFg/profile-displayphoto-scale_200_200/B4DZk8GfYnGQAc-/0/1757649959824?e=2147483647&v=beta&t=YKbwn_k9h81ruU_DXRkOl2ta_TvBhVCAIbTImU8MBzQ",
+    "headline": "CS @ UCL",
+    "experience": [
+      {
+        "position": "Machine Learning Trainee (via Delta Careers)",
+        "company_url": "https://www.linkedin.com/company/amazon-web-services?trk=public_profile_experience-item_profile-section-card_subtitle-click",
+        "company_image": "https://media.licdn.com/dms/image/v2/D4E0BAQFqdm1TZ-RZKQ/company-logo_100_100/B4EZgOay6gHEAY-/0/1752588562343/amazon_web_services_logo?e=2147483647&v=beta&t=813v--p_AS7bme1J7PlAyB2BEU4-c9ba9AUzyuGb5Wg",
+        "company_name": "Amazon Web Services (AWS)",
+        "location": null,
+        "summary": "-Selected for the competitive AWS Work Experience Cohort (via Delta Careers).-Collaborated in a team of 4 to build AllyEd, a Streamlit-based ML model predicting secondary student mental health risks.Engineered data preprocessing pipelines (imputation, scaling, PCA, SMOTE, label encoding) using Pandas and Scikit-learn, improving precision and recall. Reached 75%+ accuracy.-Applied algorithms including KNN, Logistic Regression, Decision Trees, and Neural Networks on datasets with 20,000+ samples.-Deployed solutions with AWS SageMaker and S3, gaining hands-on cloud experience.-Awarded 1st place among 10 teams after presenting to AWS executives.\n            \n\n    \n    \n\n    \n        Show less",
+        "starts_at": "Nov 2023",
+        "ends_at": "Feb 2024",
+        "duration": "4 months"
+      },
+      {
+        "position": "Software Engineer - Computer Science Society",
+        "company_url": "https://th.linkedin.com/company/harrowbangkok?trk=public_profile_experience-item_profile-section-card_subtitle-click",
+        "company_image": "https://media.licdn.com/dms/image/v2/D560BAQF2opCVACjzOA/company-logo_100_100/B56Zojl3p3JsAQ-/0/1761533721802/harrowbangkok_logo?e=2147483647&v=beta&t=uGSiykj7g2SGll56IQtWzLOr0UxfF8NzvBQV7pqBJNI",
+        "company_name": "Harrow International School Bangkok",
+        "location": "Bangkok City, Thailand",
+        "summary": "-Identified inefficiencies in the school’s paper-based music room booking system.-Designed and built a full-stack booking platform, including UX/UI prototypes in Figma, front-end development in HTML/CSS, and relational database design for scheduling automation.-Reduced administrative workload by 90% (from ~2 hours to 10 minutes per week), freeing staff time for higher-value tasks.-Strengthened expertise in user-centered design and translating theoretical knowledge into practical, real-world applications.\n            \n\n    \n    \n\n    \n        Show less",
+        "starts_at": "Jul 2023",
+        "ends_at": "Jan 2024",
+        "duration": "7 months"
+      }
+    ],
+    "education": [
+      {
+        "college_url": "https://uk.linkedin.com/school/university-college-london/?trk=public_profile_school_profile-section-card_image-click",
+        "college_name": "UCL",
+        "college_image": "https://media.licdn.com/dms/image/v2/C4E0BAQEkPpD2CJSBpQ/company-logo_100_100/company-logo_100_100/0/1663656692926/university_college_london_logo?e=2147483647&v=beta&t=OYFYh5UTRQV6rA0LzeeoKxP9Gmx3RqmCayB9jS9moII",
+        "college_degree": "Bachelor of Science - BS",
+        "college_degree_field": "Computer Science",
+        "college_duration": "2025 - 2025",
+        "college_activity": ""
+      },
+      {
+        "college_name": "Harrow International School Bangkok",
+        "college_image": "https://static.licdn.com/aero-v1/sc/h/6qpnald1ddva78jx4bnnl3vw",
+        "college_degree": "High School Diploma",
+        "college_degree_field": "4A* A level Maths, Further Maths, Physics and Computer Science & 9A*/1A IGCSE",
+        "college_duration": " - ",
+        "college_activity": "Awards: £5,000 Gold Scholarship Award"
+      }
+    ],
+    "articles": [],
+    "description": {
+      "description1": "Amazon Web Services (AWS)",
+      "description1_link": "https://www.linkedin.com/company/amazon-web-services?trk=public_profile_topcard-current-company",
+      "description2": "UCL",
+      "description2_link": "https://uk.linkedin.com/school/university-college-london/?trk=public_profile_topcard-school",
+      "description3": ""
+    },
+    "activities": [],
+    "certification": []
+  }
+}
