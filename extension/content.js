@@ -288,8 +288,10 @@
       const result = await response.json();
       console.log('✓ Data sent successfully:', result);
 
-      // Wait for server to fully process the request before opening dashboard
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Wait for server to fully process and stabilize before opening dashboard
+      // Increased delay to allow Next.js modules to stabilize after data storage
+      console.log('⏳ Waiting 2 seconds for server to stabilize...');
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       // Open dashboard in new tab
       window.open('http://localhost:3000', '_blank');

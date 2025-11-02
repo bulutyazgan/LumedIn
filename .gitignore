@@ -40,3 +40,6 @@ face_recognition_service/test_images/
 
 # Sample data
 docs/sample_output.json
+
+# Face recognition temp files
+website/temp/

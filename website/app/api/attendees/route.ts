@@ -1,77 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { scrapeMultipleProfiles, LinkedInProfile, ScrapedResult } from '@/lib/linkedinScraper';
 import { scoreMultipleCandidatesParallel, HackathonEvaluation, ScoringResult } from '@/lib/openaiScorer';
-
-// Extended attendee interface with LinkedIn data and OpenAI scoring
-interface EnrichedAttendee {
-  name: string;
-  profileUrl: string;
-  eventsAttended: number;
-  instagram: string;
-  x: string;
-  tiktok: string;
-  linkedin: string;
-  website: string;
-
-  // LinkedIn enrichment data
-  linkedinData: LinkedInProfile | null;
-  scrapingStatus: 'pending' | 'completed' | 'failed' | 'no_linkedin';
-  scrapingError?: string;
-
-  // OpenAI scoring data
-  hackathons_won: number | string | null;
-  overall_score: number | null;
-  technical_skill_summary: string | null;
-  collaboration_summary: string | null;
-  summary: string | null;
-  scoringStatus: 'pending' | 'completed' | 'failed' | 'skipped';
-  scoringError?: string;
-}
-
-interface StoredData {
-  attendees: EnrichedAttendee[];
-  eventUrl: string;
-  timestamp: string;
-  count: number;
-  scrapingProgress: {
-    total: number;
-    completed: number;
-    pending: number;
-    failed: number;
-  };
-  scoringProgress: {
-    total: number;
-    completed: number;
-    pending: number;
-    failed: number;
-    skipped: number;
-  };
-}
-
-// In-memory storage for attendee data
-let storedAttendees: StoredData = {
-  attendees: [],
-  eventUrl: '',
-  timestamp: '',
-  count: 0,
-  scrapingProgress: {
-    total: 0,
-    completed: 0,
-    pending: 0,
-    failed: 0,
-  },
-  scoringProgress: {
-    total: 0,
-    completed: 0,
-    pending: 0,
-    failed: 0,
-    skipped: 0,
-  },
-};
-
-// Track if scraping is currently in progress to prevent duplicate jobs
-let isScrapingInProgress = false;
-let isScoringInProgress = false;
+import { dataStore, type StoredData, type EnrichedAttendee } from '@/lib/dataStore';
 
 // CORS headers
 const corsHeaders = {
@@ -86,6 +16,7 @@ export async function OPTIONS() {
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('🔵 POST /api/attendees - Receiving data...');
     const data = await request.json();
 
     // Validate that we received attendee data
@@ -114,7 +45,7 @@ export async function POST(request: NextRequest) {
     const linkedinCount = enrichedAttendees.filter(a => a.linkedin).length;
 
     // Store the attendees with metadata
-    storedAttendees = {
+    dataStore.setData({
       attendees: enrichedAttendees,
       eventUrl: data.eventUrl || '',
       timestamp: new Date().toISOString(),
@@ -132,20 +63,20 @@ export async function POST(request: NextRequest) {
         failed: 0,
         skipped: 0,
       },
-    };
+    });
 
     console.log(`Received ${data.attendees.length} attendees from ${data.eventUrl || 'unknown event'}`);
     console.log(`Starting LinkedIn scraping for ${linkedinCount} profiles...`);
 
     // Start background LinkedIn scraping (don't await)
     // Only start if not already in progress to prevent duplicate API calls
-    if (linkedinCount > 0 && !isScrapingInProgress) {
-      isScrapingInProgress = true;
+    if (linkedinCount > 0 && !dataStore.isScrapingInProgress) {
+      dataStore.isScrapingInProgress = true;
       startLinkedInScraping().catch(error => {
         console.error('Background LinkedIn scraping failed:', error);
-        isScrapingInProgress = false; // Reset on error
+        dataStore.isScrapingInProgress = false; // Reset on error
       });
-    } else if (isScrapingInProgress) {
+    } else if (dataStore.isScrapingInProgress) {
       console.log('⚠️ LinkedIn scraping already in progress, skipping duplicate job');
     }
 
@@ -153,7 +84,7 @@ export async function POST(request: NextRequest) {
       success: true,
       message: `Successfully stored ${data.attendees.length} attendees`,
       count: data.attendees.length,
-      linkedinScrapingStarted: linkedinCount > 0 && !isScrapingInProgress,
+      linkedinScrapingStarted: linkedinCount > 0 && !dataStore.isScrapingInProgress,
       linkedinProfilesQueued: linkedinCount,
     }, { headers: corsHeaders });
 
@@ -168,8 +99,12 @@ export async function POST(request: NextRequest) {
 
 export async function GET() {
   // Return stored attendees for the dashboard
-  console.log(`📊 GET /api/attendees - Returning ${storedAttendees.attendees.length} attendees`);
-  return NextResponse.json(storedAttendees, { headers: corsHeaders });
+  const data = dataStore.getData();
+  console.log(`🟢 GET /api/attendees - Returning ${data.attendees.length} attendees`);
+  if (data.attendees.length === 0) {
+    console.warn('⚠️  DataStore is empty! This may indicate an HMR issue or data not yet received.');
+  }
+  return NextResponse.json(data, { headers: corsHeaders });
 }
 
 /**
@@ -177,24 +112,26 @@ export async function GET() {
  */
 async function startLinkedInScraping() {
   const apiKey = process.env.SCRAPINGDOG_API_KEY;
+  const data = dataStore.getData();
 
   if (!apiKey) {
     console.error('SCRAPINGDOG_API_KEY not found in environment variables');
     // Mark all as failed
-    storedAttendees.attendees.forEach(attendee => {
+    data.attendees.forEach(attendee => {
       if (attendee.scrapingStatus === 'pending') {
         attendee.scrapingStatus = 'failed';
         attendee.scrapingError = 'API key not configured';
       }
     });
-    storedAttendees.scrapingProgress.failed = storedAttendees.scrapingProgress.total;
-    storedAttendees.scrapingProgress.pending = 0;
+    data.scrapingProgress.failed = data.scrapingProgress.total;
+    data.scrapingProgress.pending = 0;
+    dataStore.setData(data);
     return;
   }
 
   // Extract LinkedIn URLs with their indices
   const linkedinUrls: Array<{ url: string; index: number }> = [];
-  storedAttendees.attendees.forEach((attendee, index) => {
+  data.attendees.forEach((attendee, index) => {
     if (attendee.linkedin && attendee.scrapingStatus === 'pending') {
       linkedinUrls.push({ url: attendee.linkedin, index });
     }
@@ -214,42 +151,45 @@ async function startLinkedInScraping() {
       const urlItem = linkedinUrls.find(item => item.url === lastResult.url);
       if (!urlItem) return;
 
-      const attendee = storedAttendees.attendees[urlItem.index];
+      const currentData = dataStore.getData();
+      const attendee = currentData.attendees[urlItem.index];
 
       if (lastResult.success && lastResult.data) {
         // Successfully scraped - update with LinkedIn data
         attendee.linkedinData = lastResult.data;
         attendee.scrapingStatus = 'completed';
-        storedAttendees.scrapingProgress.completed++;
+        currentData.scrapingProgress.completed++;
       } else {
         // Failed - mark as failed with error
         attendee.scrapingStatus = 'failed';
         attendee.scrapingError = lastResult.error || 'Unknown error';
-        storedAttendees.scrapingProgress.failed++;
+        currentData.scrapingProgress.failed++;
       }
 
-      storedAttendees.scrapingProgress.pending--;
+      currentData.scrapingProgress.pending--;
+      dataStore.setData(currentData);
 
       console.log(
         `LinkedIn scraping progress: ${completed}/${total} ` +
-        `(✓ ${storedAttendees.scrapingProgress.completed} / ✗ ${storedAttendees.scrapingProgress.failed})`
+        `(✓ ${currentData.scrapingProgress.completed} / ✗ ${currentData.scrapingProgress.failed})`
       );
     }
   );
 
+  const finalData = dataStore.getData();
   console.log('LinkedIn scraping completed!');
-  console.log(`Results: ${storedAttendees.scrapingProgress.completed} successful, ${storedAttendees.scrapingProgress.failed} failed`);
+  console.log(`Results: ${finalData.scrapingProgress.completed} successful, ${finalData.scrapingProgress.failed} failed`);
 
   // Reset scraping flag now that we're done
-  isScrapingInProgress = false;
+  dataStore.isScrapingInProgress = false;
 
   // Start OpenAI scoring after LinkedIn scraping completes
   console.log('Starting OpenAI scoring...');
-  if (!isScoringInProgress) {
-    isScoringInProgress = true;
+  if (!dataStore.isScoringInProgress) {
+    dataStore.isScoringInProgress = true;
     startOpenAIScoring().catch(error => {
       console.error('Background OpenAI scoring failed:', error);
-      isScoringInProgress = false; // Reset on error
+      dataStore.isScoringInProgress = false; // Reset on error
     });
   }
 }
@@ -261,25 +201,27 @@ async function startLinkedInScraping() {
 async function startOpenAIScoring() {
   const apiKey = process.env.OPENAI_API_KEY;
   const MAX_CONCURRENT = 10; // Adjust based on OpenAI tier
+  const data = dataStore.getData();
 
   if (!apiKey) {
     console.error('OPENAI_API_KEY not found in environment variables');
     // Mark all as skipped
-    storedAttendees.attendees.forEach(attendee => {
+    data.attendees.forEach(attendee => {
       if (attendee.scoringStatus === 'pending') {
         attendee.scoringStatus = 'skipped';
         attendee.scoringError = 'OpenAI API key not configured';
       }
     });
-    storedAttendees.scoringProgress.skipped = storedAttendees.scoringProgress.total;
-    storedAttendees.scoringProgress.pending = 0;
+    data.scoringProgress.skipped = data.scoringProgress.total;
+    data.scoringProgress.pending = 0;
+    dataStore.setData(data);
     return;
   }
 
   // Find attendees with successfully scraped LinkedIn data
   const attendeesToScore: Array<{ attendee: EnrichedAttendee; index: number; id: string }> = [];
 
-  storedAttendees.attendees.forEach((attendee, index) => {
+  data.attendees.forEach((attendee, index) => {
     if (attendee.scrapingStatus === 'completed' && attendee.linkedinData && attendee.scoringStatus === 'pending') {
       attendeesToScore.push({
         attendee,
@@ -289,10 +231,11 @@ async function startOpenAIScoring() {
     } else if (attendee.scrapingStatus !== 'completed' && attendee.scoringStatus === 'pending') {
       // Skip scoring for attendees without LinkedIn data
       attendee.scoringStatus = 'skipped';
-      storedAttendees.scoringProgress.skipped++;
-      storedAttendees.scoringProgress.pending--;
+      data.scoringProgress.skipped++;
+      data.scoringProgress.pending--;
     }
   });
+  dataStore.setData(data);
 
   if (attendeesToScore.length === 0) {
     console.log('No attendees to score (no successfully scraped LinkedIn profiles)');
@@ -317,6 +260,7 @@ async function startOpenAIScoring() {
       if (!item) return;
 
       const { attendee } = item;
+      const currentData = dataStore.getData();
 
       if (result.success && result.evaluation) {
         // Successfully scored - update with all scoring fields
@@ -328,27 +272,30 @@ async function startOpenAIScoring() {
         attendee.summary = evaluation.summary;
         attendee.scoringStatus = 'completed';
 
-        storedAttendees.scoringProgress.completed++;
-        storedAttendees.scoringProgress.pending--;
+        currentData.scoringProgress.completed++;
+        currentData.scoringProgress.pending--;
         console.log(`✓ Scored ${attendee.name}: ${evaluation.overall_score}/100`);
       } else {
         // Failed to score
         attendee.scoringStatus = 'failed';
         attendee.scoringError = result.error || 'Unknown scoring error';
-        storedAttendees.scoringProgress.failed++;
-        storedAttendees.scoringProgress.pending--;
+        currentData.scoringProgress.failed++;
+        currentData.scoringProgress.pending--;
         console.log(`✗ Failed to score ${attendee.name}: ${result.error}`);
       }
+
+      dataStore.setData(currentData);
     }
   );
 
+  const finalData = dataStore.getData();
   console.log('✅ OpenAI scoring completed!');
   console.log(
-    `Results: ${storedAttendees.scoringProgress.completed} scored, ` +
-    `${storedAttendees.scoringProgress.failed} failed, ` +
-    `${storedAttendees.scoringProgress.skipped} skipped`
+    `Results: ${finalData.scoringProgress.completed} scored, ` +
+    `${finalData.scoringProgress.failed} failed, ` +
+    `${finalData.scoringProgress.skipped} skipped`
   );
 
   // Reset scoring flag now that we're done
-  isScoringInProgress = false;
+  dataStore.isScoringInProgress = false;
 }

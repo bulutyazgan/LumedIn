@@ -1,7 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import styles from './page.module.css';
+import CameraModal from '@/components/CameraModal';
+import MatchResult from '@/components/MatchResult';
 
 interface LinkedInProfile {
   profile_photo?: string;
@@ -90,6 +92,15 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
 
+  // Face recognition state
+  const [showCameraModal, setShowCameraModal] = useState(false);
+  const [showMatchResult, setShowMatchResult] = useState(false);
+  const [matchData, setMatchData] = useState<any>(null);
+  const [matchedRowIndex, setMatchedRowIndex] = useState<number | null>(null);
+  const [faceMatchLoading, setFaceMatchLoading] = useState(false);
+  const [faceMatchError, setFaceMatchError] = useState<string | null>(null);
+  const matchedRowRef = useRef<HTMLTableRowElement>(null);
+
   const fetchData = async (preserveScrollPosition = false) => {
     try {
       if (!preserveScrollPosition) {
@@ -126,6 +137,66 @@ export default function Dashboard() {
       newExpanded.add(index);
     }
     setExpandedRows(newExpanded);
+  };
+
+  const handleCameraCapture = async (imageData: string) => {
+    setShowCameraModal(false);
+    setFaceMatchLoading(true);
+    setFaceMatchError(null);
+
+    try {
+      const response = await fetch('/api/match-face', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ imageData }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Face matching failed');
+      }
+
+      if (result.match) {
+        // Find the index of the matched profile in the current attendees list
+        const matchedProfile = result.match.profile;
+        const attendees = (data?.attendees || []).sort((a, b) => {
+          const scoreA = a.overall_score ?? -1;
+          const scoreB = b.overall_score ?? -1;
+          return scoreB - scoreA;
+        });
+
+        const matchedIndex = attendees.findIndex(
+          (a) => a.name === matchedProfile.name && a.profileUrl === matchedProfile.profileUrl
+        );
+
+        if (matchedIndex !== -1) {
+          setMatchedRowIndex(matchedIndex);
+
+          // Scroll to matched row after a brief delay
+          setTimeout(() => {
+            if (matchedRowRef.current) {
+              matchedRowRef.current.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center',
+              });
+            }
+          }, 100);
+        }
+
+        setMatchData(result.match);
+        setShowMatchResult(true);
+      } else {
+        setFaceMatchError('No matching face found');
+      }
+    } catch (err) {
+      console.error('Face matching error:', err);
+      setFaceMatchError(err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setFaceMatchLoading(false);
+    }
   };
 
   const downloadCSV = () => {
@@ -269,12 +340,39 @@ export default function Dashboard() {
       ) : (
         <>
           <div className={styles.summary}>
-            <h2>Summary</h2>
-            <p>Total Attendees: <strong>{attendees.length}</strong></p>
-            <button onClick={downloadCSV} className={styles.downloadBtn}>
-              Download CSV
-            </button>
+            <div>
+              <h2>Summary</h2>
+              <p>Total Attendees: <strong>{attendees.length}</strong></p>
+            </div>
+            <div className={styles.actions}>
+              <button
+                onClick={() => setShowCameraModal(true)}
+                className={styles.faceMatchBtn}
+                disabled={faceMatchLoading}
+              >
+                {faceMatchLoading ? '🔍 Matching...' : '📷 Find by Face'}
+              </button>
+              <button onClick={downloadCSV} className={styles.downloadBtn}>
+                Download CSV
+              </button>
+            </div>
           </div>
+
+          {/* Face Match Error */}
+          {faceMatchError && (
+            <div className={styles.faceMatchError}>
+              <strong>Face Match Error:</strong> {faceMatchError}
+              <button onClick={() => setFaceMatchError(null)} className={styles.dismissBtn}>✕</button>
+            </div>
+          )}
+
+          {/* Face Match Loading */}
+          {faceMatchLoading && (
+            <div className={styles.faceMatchLoading}>
+              <div className={styles.spinner}></div>
+              <p>Analyzing face and matching with attendees...</p>
+            </div>
+          )}
 
           <div className={styles.tableContainer}>
             <table className={styles.table}>
@@ -298,7 +396,13 @@ export default function Dashboard() {
               <tbody>
                 {attendees.map((attendee, index) => (
                   <>
-                    <tr key={index} className={expandedRows.has(index) ? styles.expanded : ''}>
+                    <tr
+                      key={index}
+                      ref={matchedRowIndex === index ? matchedRowRef : null}
+                      className={`${expandedRows.has(index) ? styles.expanded : ''} ${
+                        matchedRowIndex === index ? styles.matchedRow : ''
+                      }`}
+                    >
                       <td>
                         <button
                           onClick={() => toggleRow(index)}
@@ -478,6 +582,23 @@ export default function Dashboard() {
           </div>
         </>
       )}
+
+      {/* Camera Modal */}
+      <CameraModal
+        isOpen={showCameraModal}
+        onClose={() => setShowCameraModal(false)}
+        onCapture={handleCameraCapture}
+      />
+
+      {/* Match Result Modal */}
+      <MatchResult
+        isOpen={showMatchResult}
+        onClose={() => {
+          setShowMatchResult(false);
+          setMatchedRowIndex(null); // Clear highlight when closing
+        }}
+        matchData={matchData}
+      />
     </div>
   );
 }
