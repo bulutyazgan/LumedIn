@@ -1,4 +1,4 @@
-/* Styles for LumedIn Analyzer Widget */
+/* Styles for LumedIn Analyzer Widget - Purple Theme */
 
 /* Widget Container */
 .luma-analyzer-widget {
@@ -29,7 +29,7 @@
 
 .luma-analyzer-toggle:hover {
   transform: scale(1.1);
-  box-shadow: 0 6px 24px rgba(59, 130, 246, 0.4), 0 0 0 1px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 6px 24px rgba(139, 92, 246, 0.4), 0 0 0 1px rgba(139, 92, 246, 0.3);
 }
 
 .luma-analyzer-toggle.hidden {
@@ -77,7 +77,7 @@
   font-weight: 600;
   font-size: 14px;
   letter-spacing: -0.01em;
-  background: linear-gradient(135deg, #ffffff 0%, #9ca3af 100%);
+  background: linear-gradient(135deg, #ffffff 0%, #a78bfa 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -101,10 +101,39 @@
   background: rgba(255, 255, 255, 0.1);
 }
 
-/* Analyze Button */
+/* Rainbow Button Animation */
+@keyframes rainbow {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes shine {
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
 .luma-analyzer-btn {
   width: 100%;
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  background: linear-gradient(
+    90deg,
+    #a97cf8 0%,
+    #9c40ff 25%,
+    #8c1eff 50%,
+    #a855f7 75%,
+    #c084fc 100%
+  );
+  background-size: 200% 100%;
   color: white;
   border: none;
   border-radius: 8px;
@@ -113,9 +142,10 @@
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 4px 16px rgba(168, 85, 247, 0.4);
   position: relative;
   overflow: hidden;
+  animation: rainbow 3s ease infinite;
 }
 
 .luma-analyzer-btn::before {
@@ -125,17 +155,22 @@
   left: -100%;
   width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.3),
+    transparent
+  );
   transition: left 0.5s;
-}
-
-.luma-analyzer-btn:hover:not(:disabled)::before {
-  left: 100%;
 }
 
 .luma-analyzer-btn:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+  box-shadow: 0 6px 24px rgba(168, 85, 247, 0.6);
+}
+
+.luma-analyzer-btn:hover:not(:disabled)::before {
+  animation: shine 0.6s;
 }
 
 .luma-analyzer-btn:active:not(:disabled) {
@@ -145,7 +180,12 @@
 .luma-analyzer-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
-  background: linear-gradient(135deg, #4b5563 0%, #374151 100%);
+  background: #4b5563;
+  animation: none;
+}
+
+.luma-analyzer-btn:disabled::before {
+  display: none;
 }
 
 /* Responsive adjustments */
