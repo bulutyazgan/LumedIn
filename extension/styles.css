@@ -178,10 +178,11 @@
 }
 
 .luma-analyzer-btn:disabled {
-  opacity: 0.6;
+  opacity: 1;
   cursor: not-allowed;
-  background: #4b5563;
+  background: #000000;
   animation: none;
+  color: #ffffff;
 }
 
 .luma-analyzer-btn:disabled::before {

@@ -3,11 +3,15 @@
 import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import gsap from 'gsap';
-import { Camera, Download, Linkedin, Twitter, Instagram, Globe } from 'lucide-react';
+import { Camera, Download, Linkedin, Twitter, Instagram, Globe, Eye } from 'lucide-react';
+import Image from 'next/image';
 import styles from './page.module.css';
+import './themes.css';
 import CameraModal from '@/components/CameraModal';
 import MatchResult from '@/components/MatchResult';
 import CircularProgress from '@/components/CircularProgress';
+import ThemeToggler from '@/components/ThemeToggler';
+import AttendeeDetailsModal from '@/components/AttendeeDetailsModal';
 
 interface LinkedInProfile {
   profile_photo?: string;
@@ -78,7 +82,10 @@ export default function Dashboard() {
   const [data, setData] = useState<AttendeeData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+
+  // Attendee details modal state
+  const [selectedAttendee, setSelectedAttendee] = useState<Attendee | null>(null);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
 
   // Face recognition state
   const [showCameraModal, setShowCameraModal] = useState(false);
@@ -154,14 +161,14 @@ export default function Dashboard() {
     }
   }, [loading]);
 
-  const toggleRow = (index: number) => {
-    const newExpanded = new Set(expandedRows);
-    if (newExpanded.has(index)) {
-      newExpanded.delete(index);
-    } else {
-      newExpanded.add(index);
-    }
-    setExpandedRows(newExpanded);
+  const openDetailsModal = (attendee: Attendee) => {
+    setSelectedAttendee(attendee);
+    setShowDetailsModal(true);
+  };
+
+  const closeDetailsModal = () => {
+    setShowDetailsModal(false);
+    setSelectedAttendee(null);
   };
 
   const handleCameraCapture = async (imageData: string) => {
@@ -313,11 +320,23 @@ export default function Dashboard() {
 
   return (
     <div className={styles.container} ref={containerRef}>
+      {/* Theme Toggler */}
+      <ThemeToggler />
+
       {/* Horizontal Header with Progress */}
       <div className={styles.headerWithProgress}>
         {/* Left: Title Section */}
         <div className={styles.titleSection}>
-          <h1 className={styles.mainTitle}>LumedIn Analytics</h1>
+          <div className={styles.titleWithLogo}>
+            <Image
+              src="/media/logo.png"
+              alt="LumedIn Logo"
+              width={48}
+              height={48}
+              className={styles.logo}
+            />
+            <h1 className={styles.mainTitle}>LumedIn Analytics</h1>
+          </div>
           {data?.eventUrl && (
             <p className={styles.eventUrl}>
               Event: <a href={data.eventUrl} target="_blank" rel="noopener noreferrer">{data.eventUrl}</a>
@@ -473,6 +492,9 @@ export default function Dashboard() {
                   <th>Events</th>
                   <th>Score</th>
                   <th>Hackathons Won</th>
+                  <th>Tech Summary</th>
+                  <th>Collab Summary</th>
+                  <th>Summary</th>
                   <th>Status</th>
                   <th>Socials</th>
                 </tr>
@@ -483,20 +505,21 @@ export default function Dashboard() {
                     <motion.tr
                       key={index}
                       ref={matchedRowIndex === index ? matchedRowRef : null}
-                      className={`${expandedRows.has(index) ? styles.expanded : ''} ${
-                        matchedRowIndex === index ? styles.matchedRow : ''
-                      }`}
+                      className={matchedRowIndex === index ? styles.matchedRow : ''}
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       transition={{ delay: index * 0.02 }}
                     >
                       <td>
-                        <button
-                          onClick={() => toggleRow(index)}
+                        <motion.button
+                          onClick={() => openDetailsModal(attendee)}
                           className={styles.expandBtn}
+                          whileHover={{ scale: 1.1 }}
+                          whileTap={{ scale: 0.9 }}
+                          title="View full details"
                         >
-                          {expandedRows.has(index) ? '▼' : '▶'}
-                        </button>
+                          <Eye size={18} />
+                        </motion.button>
                       </td>
                       <td>
                         {attendee.linkedinData?.profile_photo ? (
@@ -536,6 +559,27 @@ export default function Dashboard() {
                           ? attendee.hackathons_won
                           : '-'}
                       </td>
+                      <td className={styles.summaryCell}>
+                        {attendee.technical_skill_summary || (
+                          attendee.scoringStatus === 'pending' ? (
+                            <span className={styles.loading}>...</span>
+                          ) : '-'
+                        )}
+                      </td>
+                      <td className={styles.summaryCell}>
+                        {attendee.collaboration_summary || (
+                          attendee.scoringStatus === 'pending' ? (
+                            <span className={styles.loading}>...</span>
+                          ) : '-'
+                        )}
+                      </td>
+                      <td className={styles.summaryCell}>
+                        {attendee.summary || (
+                          attendee.scoringStatus === 'pending' ? (
+                            <span className={styles.loading}>...</span>
+                          ) : '-'
+                        )}
+                      </td>
                       <td>
                         <span className={`${styles.status} ${styles[attendee.scrapingStatus || 'no_linkedin']}`}>
                           {attendee.scrapingStatus === 'pending' && '⏳'}
@@ -567,56 +611,6 @@ export default function Dashboard() {
                         )}
                       </td>
                     </motion.tr>
-
-                    {/* Expanded Row Details */}
-                    {expandedRows.has(index) && attendee.linkedinData && (
-                      <tr key={`${index}-expanded`} className={styles.expandedContent}>
-                        <td colSpan={9}>
-                          <div className={styles.detailsContainer}>
-                            {/* About */}
-                            {attendee.linkedinData.about && (
-                              <div className={styles.detailSection}>
-                                <h4>About</h4>
-                                <p>{attendee.linkedinData.about}</p>
-                              </div>
-                            )}
-
-                            {/* Experience */}
-                            {attendee.linkedinData.experience && attendee.linkedinData.experience.length > 0 && (
-                              <div className={styles.detailSection}>
-                                <h4>Experience ({attendee.linkedinData.experience.length})</h4>
-                                {attendee.linkedinData.experience.slice(0, 3).map((exp, i) => (
-                                  <div key={i} className={styles.experienceItem}>
-                                    <strong>{exp.position}</strong> at {exp.company_name}
-                                    <br />
-                                    <span className={styles.meta}>{exp.duration} • {exp.location}</span>
-                                  </div>
-                                ))}
-                                {attendee.linkedinData.experience.length > 3 && (
-                                  <p className={styles.more}>+ {attendee.linkedinData.experience.length - 3} more</p>
-                                )}
-                              </div>
-                            )}
-
-                            {/* Education */}
-                            {attendee.linkedinData.education && attendee.linkedinData.education.length > 0 && (
-                              <div className={styles.detailSection}>
-                                <h4>Education</h4>
-                                {attendee.linkedinData.education.map((edu, i) => (
-                                  <div key={i} className={styles.educationItem}>
-                                    <strong>{edu.college_name}</strong>
-                                    {edu.college_degree && <span> - {edu.college_degree}</span>}
-                                    {edu.college_degree_field && <span> ({edu.college_degree_field})</span>}
-                                    <br />
-                                    <span className={styles.meta}>{edu.college_duration}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    )}
                   </>
                 ))}
               </tbody>
@@ -624,6 +618,13 @@ export default function Dashboard() {
           </div>
         </>
       )}
+
+      {/* Attendee Details Modal */}
+      <AttendeeDetailsModal
+        isOpen={showDetailsModal}
+        onClose={closeDetailsModal}
+        attendee={selectedAttendee}
+      />
 
       {/* Camera Modal */}
       <CameraModal
