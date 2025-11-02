@@ -18,9 +18,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (candidates.length < 3 || candidates.length > 5) {
+    if (candidates.length === 0) {
       return NextResponse.json(
-        { success: false, error: 'Must select between 3 and 5 candidates' },
+        { success: false, error: 'Must select at least 1 candidate' },
         { status: 400 }
       );
     }
@@ -41,6 +41,21 @@ export async function POST(request: NextRequest) {
 
     // Generate email based on mode
     if (emailMode === 'team') {
+      // Team mode requires 3-5 candidates, but for 2 candidates we'll use individual mode
+      if (candidates.length < 3) {
+        return NextResponse.json(
+          { success: false, error: 'Team invites require at least 3 candidates. For 1-2 candidates, individual mode will be used automatically.' },
+          { status: 400 }
+        );
+      }
+
+      if (candidates.length > 5) {
+        return NextResponse.json(
+          { success: false, error: 'Team invites support maximum 5 candidates' },
+          { status: 400 }
+        );
+      }
+
       const result = await generateTeamInvitationEmail(
         candidates as CandidateProfile[],
         hackathonDescription
@@ -58,14 +73,13 @@ export async function POST(request: NextRequest) {
         emailDraft: result.emailDraft
       });
     } else {
-      // Individual mode
+      // Individual mode - works for any number of candidates
       const resultsMap = await generateIndividualInvitationEmails(
         candidates as CandidateProfile[],
         hackathonDescription
       );
 
-      // For now, return the first successful email or error
-      // In the future, could return all emails
+      // Return the first candidate's email (when only 1 selected, this is the only one)
       for (const [candidateId, result] of resultsMap.entries()) {
         if (result.success && result.emailDraft) {
           return NextResponse.json({
@@ -77,7 +91,7 @@ export async function POST(request: NextRequest) {
       }
 
       return NextResponse.json(
-        { success: false, error: 'Failed to generate individual emails' },
+        { success: false, error: 'Failed to generate individual email' },
         { status: 500 }
       );
     }

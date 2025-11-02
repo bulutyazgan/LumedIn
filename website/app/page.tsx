@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { Camera, Download, Linkedin, Mail, Send } from 'lucide-react';
+import { Camera, Download, Linkedin, Mail } from 'lucide-react';
 import Image from 'next/image';
 import styles from './page.module.css';
 import CameraModal from '@/components/CameraModal';
@@ -276,14 +276,11 @@ export default function Dashboard() {
     }
   };
 
-  // Email generation handlers
-  const handleGenerateTeamInvite = () => {
-    setEmailMode('team');
-    setShowDescriptionModal(true);
-  };
-
-  const handleGenerateIndividualInvites = () => {
-    setEmailMode('individual');
+  // Email generation handler
+  const handleGenerateInvite = () => {
+    // Automatically determine mode based on selection count
+    // Use individual mode for 1-2 candidates, team mode for 3+
+    setEmailMode(selectedAttendees.size <= 2 ? 'individual' : 'team');
     setShowDescriptionModal(true);
   };
 
@@ -450,10 +447,7 @@ export default function Dashboard() {
               <p>Total Attendees: <strong>{attendees.length}</strong></p>
               {selectedAttendees.size > 0 && (
                 <p className={styles.selectionInfo}>
-                  Selected: <strong>{selectedAttendees.size}</strong>
-                  {selectedAttendees.size < 3 || selectedAttendees.size > 5 ? (
-                    <span className={styles.validationHelper}> (Select 3-5 to generate invites)</span>
-                  ) : null}
+                  Selected: <strong>{selectedAttendees.size}</strong> candidate{selectedAttendees.size !== 1 ? 's' : ''}
                 </p>
               )}
             </div>
@@ -467,20 +461,18 @@ export default function Dashboard() {
                 <Camera size={20} />
               </button>
               <button
-                onClick={handleGenerateTeamInvite}
+                onClick={handleGenerateInvite}
                 className={styles.emailBtn}
-                disabled={selectedAttendees.size < 3 || selectedAttendees.size > 5}
-                title={selectedAttendees.size < 3 || selectedAttendees.size > 5 ? "Select 3-5 candidates" : "Generate Team Invite"}
+                disabled={selectedAttendees.size === 0}
+                title={
+                  selectedAttendees.size === 0
+                    ? "Select 1+ candidates to generate invite"
+                    : selectedAttendees.size <= 2
+                    ? "Generate Individual Invite"
+                    : "Generate Team Invite"
+                }
               >
                 <Mail size={20} />
-              </button>
-              <button
-                onClick={handleGenerateIndividualInvites}
-                className={styles.emailBtn}
-                disabled={selectedAttendees.size < 3 || selectedAttendees.size > 5}
-                title={selectedAttendees.size < 3 || selectedAttendees.size > 5 ? "Select 3-5 candidates" : "Generate Individual Invites"}
-              >
-                <Send size={20} />
               </button>
               <button onClick={downloadCSV} className={styles.downloadBtn} title="Download CSV">
                 <Download size={20} />
@@ -778,12 +770,20 @@ export default function Dashboard() {
         <div className={styles.modalOverlay} onClick={() => setShowDescriptionModal(false)}>
           <div className={styles.modalContainer} onClick={(e) => e.stopPropagation()}>
             <div className={styles.modalHeader}>
-              <h3>{emailMode === 'team' ? 'Generate Team Invite' : 'Generate Individual Invites'}</h3>
+              <h3>
+                {selectedAttendees.size <= 2
+                  ? 'Generate Individual Invite'
+                  : 'Generate Team Invite'}
+              </h3>
               <button onClick={() => setShowDescriptionModal(false)} className={styles.modalCloseBtn}>✕</button>
             </div>
             <div className={styles.modalBody}>
               <p className={styles.modalInfo}>
-                Selected {selectedAttendees.size} candidate{selectedAttendees.size !== 1 ? 's' : ''}
+                {selectedAttendees.size === 1
+                  ? `Generating personalized invite for 1 candidate`
+                  : selectedAttendees.size === 2
+                  ? `Generating individual invites for 2 candidates`
+                  : `Generating team invite for ${selectedAttendees.size} candidates`}
               </p>
               <label htmlFor="hackathonDescription" className={styles.modalLabel}>
                 Describe your hackathon opportunity:
