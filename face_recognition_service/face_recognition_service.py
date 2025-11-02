@@ -8,6 +8,7 @@ import hashlib
 import tempfile
 import requests
 import logging
+import cv2
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
@@ -15,7 +16,6 @@ logger = logging.getLogger(__name__)
 
 
 class FaceRecognitionService:
-    # Recommended thresholds for different models (cosine distance)
     THRESHOLDS = {
         'VGG-Face': 0.40,
         'Facenet': 0.40,
@@ -32,19 +32,25 @@ class FaceRecognitionService:
         self, 
         model_name: str = "VGG-Face",
         distance_metric: str = "cosine",
-        enforce_detection: bool = False,  # More lenient by default
+        enforce_detection: bool = False,
         detector_backend: str = "opencv",
-        cache_images: bool = True
+        cache_images: bool = True,
+        extract_faces: bool = True, 
+        align_faces: bool = True,     
+        expand_face_region: float = 1.2  
     ):
         self.model_name = model_name
         self.distance_metric = distance_metric
         self.enforce_detection = enforce_detection
         self.detector_backend = detector_backend
         self.cache_images = cache_images
+        self.extract_faces = extract_faces
+        self.align_faces = align_faces
+        self.expand_face_region = expand_face_region
         self.image_cache = {}
+        self.face_cache = {}  # Cache for extracted faces
     
     def verify_image(self, image_path: str) -> bool:
-        """Quick verification that image exists and is valid."""
         try:
             if not Path(image_path).exists():
                 logger.debug(f"Image file not found: {image_path}")
@@ -65,14 +71,12 @@ class FaceRecognitionService:
             return False
     
     def download_and_cache_image(self, url: str) -> Optional[str]:
-        """Download image from URL and cache it locally."""
         if not url:
             return None
             
         if not url.startswith('http'):
             return url if self.verify_image(url) else None
         
-        # Check cache first
         url_hash = hashlib.md5(url.encode()).hexdigest()
         
         if self.cache_images and url_hash in self.image_cache:
@@ -85,7 +89,6 @@ class FaceRecognitionService:
             response = requests.get(url, timeout=10, stream=True)
             response.raise_for_status()
             
-            # Save to temporary file
             temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.jpg')
             
             for chunk in response.iter_content(chunk_size=8192):
@@ -93,8 +96,7 @@ class FaceRecognitionService:
             
             temp_file.close()
             temp_path = temp_file.name
-            
-            # Verify the downloaded image
+
             if self.verify_image(temp_path):
                 if self.cache_images:
                     self.image_cache[url_hash] = temp_path
@@ -106,8 +108,143 @@ class FaceRecognitionService:
             logger.debug(f"Failed to download image from {url}: {e}")
             return None
     
+    def extract_face_from_image(
+        self, 
+        image_path: str,
+        target_size: tuple = (224, 224),
+        return_largest: bool = True
+    ) -> Optional[str]:
+
+        cache_key = hashlib.md5(f"{image_path}_extracted".encode()).hexdigest()
+        
+        if self.cache_images and cache_key in self.face_cache:
+            cached_path = self.face_cache[cache_key]
+            if self.verify_image(cached_path):
+                logger.debug(f"Using cached extracted face")
+                return cached_path
+        
+        try:
+            face_objs = DeepFace.extract_faces(
+                img_path=image_path,
+                detector_backend=self.detector_backend,
+                enforce_detection=False,  # Don't fail if no face detected
+                align=self.align_faces,
+                target_size=target_size
+            )
+            
+            if not face_objs:
+                logger.debug("No faces detected in image")
+                return None
+            
+            if len(face_objs) > 1:
+                logger.debug(f"Found {len(face_objs)} faces in image")
+                if return_largest:
+                    # Get the face with largest area
+                    face_obj = max(face_objs, key=lambda x: x['facial_area']['w'] * x['facial_area']['h'])
+                    logger.debug(f"Selected largest face")
+                else:
+                    # Return the first face
+                    face_obj = face_objs[0]
+            else:
+                face_obj = face_objs[0]
+
+            face_img = face_obj['face']
+
+            if face_img.max() <= 1.0:
+                face_img = (face_img * 255).astype(np.uint8)
+            
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.jpg')
+            face_pil = Image.fromarray(face_img)
+            face_pil.save(temp_file.name, 'JPEG', quality=95)
+            temp_file.close()
+            
+            logger.debug(f"Extracted face saved to {temp_file.name}")
+
+            if self.cache_images:
+                self.face_cache[cache_key] = temp_file.name
+            
+            return temp_file.name
+            
+        except Exception as e:
+            logger.debug(f"Face extraction failed: {str(e)[:100]}")
+            return None
+    
+    def extract_face_with_expansion(
+        self,
+        image_path: str,
+        target_size: tuple = (224, 224)
+    ) -> Optional[str]:
+        try:
+            # Read the image
+            img = cv2.imread(image_path)
+            if img is None:
+                return None
+            
+            img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            
+            # Detect face
+            face_objs = DeepFace.extract_faces(
+                img_path=image_path,
+                detector_backend=self.detector_backend,
+                enforce_detection=False,
+                align=False  # Don't align yet, we need original coordinates
+            )
+            
+            if not face_objs:
+                return None
+            
+            # Get largest face
+            face_obj = max(face_objs, key=lambda x: x['facial_area']['w'] * x['facial_area']['h'])
+            facial_area = face_obj['facial_area']
+            
+            # Expand the bounding box
+            x, y, w, h = facial_area['x'], facial_area['y'], facial_area['w'], facial_area['h']
+            
+            # Calculate expansion
+            expand_w = int(w * (self.expand_face_region - 1) / 2)
+            expand_h = int(h * (self.expand_face_region - 1) / 2)
+            
+            # New coordinates with bounds checking
+            x1 = max(0, x - expand_w)
+            y1 = max(0, y - expand_h)
+            x2 = min(img_rgb.shape[1], x + w + expand_w)
+            y2 = min(img_rgb.shape[0], y + h + expand_h)
+            
+            # Extract expanded face region
+            face_expanded = img_rgb[y1:y2, x1:x2]
+            
+            # Resize to target size
+            face_resized = cv2.resize(face_expanded, target_size)
+            
+            # Save to temporary file
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.jpg')
+            face_pil = Image.fromarray(face_resized)
+            face_pil.save(temp_file.name, 'JPEG', quality=95)
+            temp_file.close()
+            
+            logger.debug(f"Extracted expanded face ({self.expand_face_region}x)")
+            return temp_file.name
+            
+        except Exception as e:
+            logger.debug(f"Expanded face extraction failed: {str(e)[:100]}")
+            return None
+    
+    def preprocess_image(self, image_path: str) -> str:
+
+        if not self.extract_faces:
+            return image_path
+        
+        # Try to extract face
+        extracted_path = self.extract_face_from_image(image_path)
+        
+        if extracted_path:
+            logger.debug(f"Using extracted face for comparison")
+            return extracted_path
+        else:
+            logger.debug(f"No face extracted, using original image")
+            return image_path
+    
     def load_linkedin_profiles(self, json_file_path: str) -> List[Dict[str, Any]]:
-        """Load LinkedIn profile data from JSON file."""
         try:
             with open(json_file_path, 'r') as f:
                 profiles = json.load(f)
@@ -142,7 +279,6 @@ class FaceRecognitionService:
         threshold = self.THRESHOLDS.get(model_name, 0.40)
         
         # Simple but effective: confidence decreases as distance increases
-        # Beyond threshold, confidence drops rapidly
         if distance < threshold:
             confidence = 1.0 - (distance / threshold) * 0.5
         else:
@@ -157,9 +293,13 @@ class FaceRecognitionService:
     ) -> Optional[Dict[str, Any]]:
         """Compare two faces and return distance and confidence."""
         try:
+            # Preprocess images (extract faces if enabled)
+            processed_img1 = self.preprocess_image(img1_path)
+            processed_img2 = self.preprocess_image(img2_path)
+            
             result = DeepFace.verify(
-                img1_path=img1_path,
-                img2_path=img2_path,
+                img1_path=processed_img1,
+                img2_path=processed_img2,
                 model_name=self.model_name,
                 distance_metric=self.distance_metric,
                 enforce_detection=self.enforce_detection,
@@ -173,7 +313,8 @@ class FaceRecognitionService:
                 'distance': distance,
                 'confidence': confidence,
                 'verified': result.get('verified', False),
-                'threshold': result.get('threshold', self.THRESHOLDS.get(self.model_name, 0.40))
+                'threshold': result.get('threshold', self.THRESHOLDS.get(self.model_name, 0.40)),
+                'face_extracted': self.extract_faces
             }
             
         except Exception as e:
@@ -185,7 +326,7 @@ class FaceRecognitionService:
         target_image_path: str,
         profiles_json_path: str,
         image_field: str = "imageUrl",
-        min_confidence: float = 0.0,  # No minimum by default
+        min_confidence: float = 0.0,
         return_top_n: int = 1
     ) -> Optional[Dict[str, Any]]:
         """Find the best matching profile(s)."""
@@ -197,6 +338,14 @@ class FaceRecognitionService:
         
         logger.info(f"✓ Target image verified: {target_image_path}")
         
+        # If face extraction is enabled, show what we found
+        if self.extract_faces:
+            extracted = self.extract_face_from_image(target_image_path)
+            if extracted:
+                logger.info(f"✓ Face extracted from target image")
+            else:
+                logger.info(f"⚠️  No face extracted, will use full image")
+        
         # Load profiles
         profiles = self.load_linkedin_profiles(profiles_json_path)
         if not profiles:
@@ -206,6 +355,7 @@ class FaceRecognitionService:
         matches = []
         processed_count = 0
         error_count = 0
+        face_extracted_count = 0
         
         for i, profile in enumerate(profiles):
             if image_field not in profile or not profile[image_field]:
@@ -234,8 +384,12 @@ class FaceRecognitionService:
                         'distance': result['distance'],
                         'confidence': result['confidence'],
                         'verified': result['verified'],
-                        'threshold': result['threshold']
+                        'threshold': result['threshold'],
+                        'face_extracted': result.get('face_extracted', False)
                     })
+                    
+                    if result.get('face_extracted'):
+                        face_extracted_count += 1
                     
                     logger.info(f"  ✓ Distance: {result['distance']:.4f}, Confidence: {result['confidence']:.2%}")
                     processed_count += 1
@@ -250,6 +404,8 @@ class FaceRecognitionService:
         logger.info(f"\n{'='*60}")
         logger.info(f"Processed: {processed_count}/{len(profiles)} profiles")
         logger.info(f"Errors: {error_count}")
+        if self.extract_faces:
+            logger.info(f"Faces extracted: {face_extracted_count}/{processed_count}")
         
         if not matches:
             logger.warning("❌ No valid comparisons completed")
@@ -332,33 +488,24 @@ class FaceRecognitionService:
 
 
 def main(json_data, target_img_data, **kwargs):
-    """
-    Main function that accepts either file paths or actual data.
-    
-    Args:
-        json_data: Either a file path (str) OR a list of profile dictionaries
-        target_img_data: Either a file path (str) OR a PIL Image object OR numpy array
-        **kwargs: Additional parameters:
-            - model_name: str (default: "VGG-Face")
-            - enforce_detection: bool (default: False)
-            - min_confidence: float (default: 0.0)
-            - max_results: int (default: 5)
-    
-    Returns:
-        List of matching profiles with confidence scores
-    """
     
     # Extract kwargs with defaults
     model_name = kwargs.get('model_name', 'VGG-Face')
     enforce_detection = kwargs.get('enforce_detection', False)
     min_confidence = kwargs.get('min_confidence', 0.0)
     max_results = kwargs.get('max_results', 5)
+    extract_faces = kwargs.get('extract_faces', True)  # NEW
+    align_faces = kwargs.get('align_faces', True)      # NEW
+    expand_face_region = kwargs.get('expand_face_region', 1.2)  # NEW
     
     service = FaceRecognitionService(
         model_name=model_name,
         distance_metric="cosine",
         enforce_detection=enforce_detection,
-        cache_images=True
+        cache_images=True,
+        extract_faces=extract_faces,
+        align_faces=align_faces,
+        expand_face_region=expand_face_region
     )
     
     # Handle json_data
@@ -401,21 +548,13 @@ def main(json_data, target_img_data, **kwargs):
 
 # Example usage with different configurations:
 
+
+
 import json
 from PIL import Image
 
 profiles = json.load(open("./docs/sample_output.json"))
-img = Image.open("./face_recognition_service/test_images/test_img7.jpg")
-results = main(profiles, img, enforce_detection=False, min_confidence=0.1)
+img = Image.open("./face_recognition_service/test_images/test_img3.jpg")
 
-# 1. MOST LENIENT (like original) - finds matches even if not perfect:
-# results = main(profiles, img, enforce_detection=False, min_confidence=0.0)
-
-# 2. BALANCED - good accuracy without being too strict:
-# results = main(profiles, img, enforce_detection=False, min_confidence=0.3)
-
-# 3. STRICT - only high confidence matches:
-# results = main(profiles, img, enforce_detection=True, min_confidence=0.6, model_name="Facenet512")
-
-# 4. Try different model:
-# results = main(profiles, img, model_name="ArcFace", enforce_detection=False)
+results = main(profiles, img, model_name="Facenet512", extract_faces=True, min_confidence=0.1)
+print(results[0])
