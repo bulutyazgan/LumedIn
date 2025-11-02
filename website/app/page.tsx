@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { Camera, Download, Linkedin } from 'lucide-react';
+import { Camera, Download, Linkedin, Mail, Send } from 'lucide-react';
 import Image from 'next/image';
 import styles from './page.module.css';
 import CameraModal from '@/components/CameraModal';
@@ -102,6 +102,16 @@ export default function Dashboard() {
   const [faceMatchLoading, setFaceMatchLoading] = useState(false);
   const [faceMatchError, setFaceMatchError] = useState<string | null>(null);
   const matchedRowRef = useRef<HTMLTableRowElement>(null);
+
+  // Team invite email generator state
+  const [selectedAttendees, setSelectedAttendees] = useState<Set<number>>(new Set());
+  const [showDescriptionModal, setShowDescriptionModal] = useState(false);
+  const [emailMode, setEmailMode] = useState<'team' | 'individual'>('team');
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [generatedEmail, setGeneratedEmail] = useState<{ subject: string; body: string } | null>(null);
+  const [emailGenerating, setEmailGenerating] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [emailCopied, setEmailCopied] = useState(false);
 
   const fetchData = async (preserveScrollPosition = false) => {
     try {
@@ -247,6 +257,90 @@ export default function Dashboard() {
     URL.revokeObjectURL(url);
   };
 
+  // Checkbox handlers
+  const toggleAttendeeSelection = (index: number) => {
+    const newSelected = new Set(selectedAttendees);
+    if (newSelected.has(index)) {
+      newSelected.delete(index);
+    } else {
+      newSelected.add(index);
+    }
+    setSelectedAttendees(newSelected);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedAttendees.size === attendees.length) {
+      setSelectedAttendees(new Set());
+    } else {
+      setSelectedAttendees(new Set(attendees.map((_, i) => i)));
+    }
+  };
+
+  // Email generation handlers
+  const handleGenerateTeamInvite = () => {
+    setEmailMode('team');
+    setShowDescriptionModal(true);
+  };
+
+  const handleGenerateIndividualInvites = () => {
+    setEmailMode('individual');
+    setShowDescriptionModal(true);
+  };
+
+  const handleDescriptionSubmit = async (description: string) => {
+    setShowDescriptionModal(false);
+    setEmailGenerating(true);
+    setEmailError(null);
+
+    try {
+      // Transform selected attendees to CandidateProfile format
+      const selectedIndices = Array.from(selectedAttendees);
+      const candidates = selectedIndices.map(index => {
+        const attendee = attendees[index];
+        return {
+          id: attendee.profileUrl,
+          name: attendee.name,
+          data: attendee.linkedinData || {}
+        };
+      });
+
+      const response = await fetch('/api/generate-invite', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          candidates,
+          hackathonDescription: description,
+          emailMode
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Email generation failed');
+      }
+
+      setGeneratedEmail(result.emailDraft);
+      setShowEmailModal(true);
+    } catch (err) {
+      console.error('Email generation error:', err);
+      setEmailError(err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setEmailGenerating(false);
+    }
+  };
+
+  const copyEmailToClipboard = () => {
+    if (!generatedEmail) return;
+
+    const emailText = `Subject: ${generatedEmail.subject}\n\n${generatedEmail.body}`;
+    navigator.clipboard.writeText(emailText);
+    setEmailCopied(true);
+    setTimeout(() => setEmailCopied(false), 2000);
+  };
+
   if (loading) {
     return (
       <div className={styles.container}>
@@ -354,6 +448,14 @@ export default function Dashboard() {
             <div>
               <h2>Summary</h2>
               <p>Total Attendees: <strong>{attendees.length}</strong></p>
+              {selectedAttendees.size > 0 && (
+                <p className={styles.selectionInfo}>
+                  Selected: <strong>{selectedAttendees.size}</strong>
+                  {selectedAttendees.size < 3 || selectedAttendees.size > 5 ? (
+                    <span className={styles.validationHelper}> (Select 3-5 to generate invites)</span>
+                  ) : null}
+                </p>
+              )}
             </div>
             <div className={styles.actions}>
               <button
@@ -363,6 +465,22 @@ export default function Dashboard() {
                 title="Find by Face"
               >
                 <Camera size={20} />
+              </button>
+              <button
+                onClick={handleGenerateTeamInvite}
+                className={styles.emailBtn}
+                disabled={selectedAttendees.size < 3 || selectedAttendees.size > 5}
+                title={selectedAttendees.size < 3 || selectedAttendees.size > 5 ? "Select 3-5 candidates" : "Generate Team Invite"}
+              >
+                <Mail size={20} />
+              </button>
+              <button
+                onClick={handleGenerateIndividualInvites}
+                className={styles.emailBtn}
+                disabled={selectedAttendees.size < 3 || selectedAttendees.size > 5}
+                title={selectedAttendees.size < 3 || selectedAttendees.size > 5 ? "Select 3-5 candidates" : "Generate Individual Invites"}
+              >
+                <Send size={20} />
               </button>
               <button onClick={downloadCSV} className={styles.downloadBtn} title="Download CSV">
                 <Download size={20} />
@@ -386,6 +504,22 @@ export default function Dashboard() {
             </div>
           )}
 
+          {/* Email Generation Error */}
+          {emailError && (
+            <div className={styles.faceMatchError}>
+              <strong>Email Generation Error:</strong> {emailError}
+              <button onClick={() => setEmailError(null)} className={styles.dismissBtn}>✕</button>
+            </div>
+          )}
+
+          {/* Email Generation Loading */}
+          {emailGenerating && (
+            <div className={styles.faceMatchLoading}>
+              <div className={styles.spinner}></div>
+              <p>Generating {emailMode === 'team' ? 'team invite' : 'individual invites'} with AI...</p>
+            </div>
+          )}
+
           <div className={styles.tableContainer}>
             <table className={styles.table}>
               <thead>
@@ -400,6 +534,15 @@ export default function Dashboard() {
                   <th>Overall Score</th>
                   <th>Hackathons Won</th>
                   <th>Socials</th>
+                  <th>
+                    <input
+                      type="checkbox"
+                      checked={selectedAttendees.size === attendees.length && attendees.length > 0}
+                      onChange={toggleSelectAll}
+                      title="Select All"
+                      className={styles.selectCheckbox}
+                    />
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -483,12 +626,20 @@ export default function Dashboard() {
                         {attendee.tiktok && <a href={attendee.tiktok} target="_blank" rel="noopener noreferrer">TT</a>}
                         {attendee.website && <a href={attendee.website} target="_blank" rel="noopener noreferrer">Web</a>}
                       </td>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={selectedAttendees.has(index)}
+                          onChange={() => toggleAttendeeSelection(index)}
+                          className={styles.selectCheckbox}
+                        />
+                      </td>
                     </tr>
 
                     {/* Expanded Row Details */}
                     {expandedRows.has(index) && (
                       <tr key={`${index}-expanded`} className={styles.expandedContent}>
-                        <td colSpan={10}>
+                        <td colSpan={11}>
                           <div className={styles.detailsContainer}>
                             {/* AI Summaries Section */}
                             <div className={styles.summariesSection}>
@@ -521,7 +672,7 @@ export default function Dashboard() {
                             )}
 
                             {/* Experience */}
-                            {attendee.linkedinData.experience && attendee.linkedinData.experience.length > 0 && (
+                            {attendee.linkedinData?.experience && attendee.linkedinData.experience.length > 0 && (
                               <div className={styles.detailSection}>
                                 <h4>Experience ({attendee.linkedinData.experience.length})</h4>
                                 {attendee.linkedinData.experience.slice(0, 3).map((exp, i) => (
@@ -538,7 +689,7 @@ export default function Dashboard() {
                             )}
 
                             {/* Education */}
-                            {attendee.linkedinData.education && attendee.linkedinData.education.length > 0 && (
+                            {attendee.linkedinData?.education && attendee.linkedinData.education.length > 0 && (
                               <div className={styles.detailSection}>
                                 <h4>Education</h4>
                                 {attendee.linkedinData.education.map((edu, i) => (
@@ -554,7 +705,7 @@ export default function Dashboard() {
                             )}
 
                             {/* Certifications */}
-                            {attendee.linkedinData.certification && attendee.linkedinData.certification.length > 0 && (
+                            {attendee.linkedinData?.certification && attendee.linkedinData.certification.length > 0 && (
                               <div className={styles.detailSection}>
                                 <h4>Certifications ({attendee.linkedinData.certification.length})</h4>
                                 {attendee.linkedinData.certification.slice(0, 3).map((cert, i) => (
@@ -571,7 +722,7 @@ export default function Dashboard() {
                             )}
 
                             {/* Activities - Show only "Shared by" activities */}
-                            {attendee.linkedinData.activities && attendee.linkedinData.activities.length > 0 && (() => {
+                            {attendee.linkedinData?.activities && attendee.linkedinData.activities.length > 0 && (() => {
                               const sharedActivities = attendee.linkedinData.activities.filter(
                                 activity => activity.activity && activity.activity.startsWith('Shared by')
                               );
@@ -621,6 +772,91 @@ export default function Dashboard() {
         }}
         matchData={matchData}
       />
+
+      {/* Hackathon Description Modal */}
+      {showDescriptionModal && (
+        <div className={styles.modalOverlay} onClick={() => setShowDescriptionModal(false)}>
+          <div className={styles.modalContainer} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h3>{emailMode === 'team' ? 'Generate Team Invite' : 'Generate Individual Invites'}</h3>
+              <button onClick={() => setShowDescriptionModal(false)} className={styles.modalCloseBtn}>✕</button>
+            </div>
+            <div className={styles.modalBody}>
+              <p className={styles.modalInfo}>
+                Selected {selectedAttendees.size} candidate{selectedAttendees.size !== 1 ? 's' : ''}
+              </p>
+              <label htmlFor="hackathonDescription" className={styles.modalLabel}>
+                Describe your hackathon opportunity:
+              </label>
+              <textarea
+                id="hackathonDescription"
+                className={styles.modalTextarea}
+                placeholder="Example: We're organizing a 48-hour AI hackathon focused on building innovative solutions with large language models. The event will feature mentorship from industry experts, access to cutting-edge APIs, and prizes worth $50k..."
+                rows={6}
+              />
+            </div>
+            <div className={styles.modalFooter}>
+              <button
+                onClick={() => setShowDescriptionModal(false)}
+                className={styles.modalCancelBtn}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const textarea = document.getElementById('hackathonDescription') as HTMLTextAreaElement;
+                  const description = textarea?.value.trim();
+                  if (description && description.length >= 10) {
+                    handleDescriptionSubmit(description);
+                  } else {
+                    alert('Please enter a meaningful hackathon description (at least 10 characters)');
+                  }
+                }}
+                className={styles.modalSubmitBtn}
+              >
+                Generate Email
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Email Preview Modal */}
+      {showEmailModal && generatedEmail && (
+        <div className={styles.modalOverlay} onClick={() => setShowEmailModal(false)}>
+          <div className={styles.modalContainer} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h3>Generated Email</h3>
+              <button onClick={() => setShowEmailModal(false)} className={styles.modalCloseBtn}>✕</button>
+            </div>
+            <div className={styles.modalBody}>
+              <div className={styles.emailPreview}>
+                <div className={styles.emailSubject}>
+                  <strong>Subject:</strong> {generatedEmail.subject}
+                </div>
+                <div className={styles.emailBody}>
+                  <strong>Body:</strong>
+                  <pre>{generatedEmail.body}</pre>
+                </div>
+              </div>
+            </div>
+            <div className={styles.modalFooter}>
+              <button
+                onClick={() => setShowEmailModal(false)}
+                className={styles.modalCancelBtn}
+              >
+                Close
+              </button>
+              <button
+                onClick={copyEmailToClipboard}
+                className={styles.modalSubmitBtn}
+              >
+                {emailCopied ? '✓ Copied!' : 'Copy to Clipboard'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
