@@ -56,11 +56,9 @@ interface Attendee {
 
   // OpenAI scoring data
   hackathons_won?: number | string | null;
-  technical_skill?: number | null;
-  technical_skill_summary?: string | null;
-  collaboration?: number | null;
-  collaboration_summary?: string | null;
   overall_score?: number | null;
+  technical_skill_summary?: string | null;
+  collaboration_summary?: string | null;
   summary?: string | null;
   scoringStatus?: 'pending' | 'completed' | 'failed' | 'skipped';
   scoringError?: string;
@@ -137,7 +135,7 @@ export default function Dashboard() {
       [
         'Name', 'Profile URL', 'Events Attended', 'Instagram', 'X', 'TikTok', 'LinkedIn', 'Website',
         'Headline', 'About', 'Scraping Status',
-        'Overall Score', 'Technical Skill', 'Collaboration', 'Hackathons Won',
+        'Overall Score', 'Hackathons Won',
         'Technical Skill Summary', 'Collaboration Summary', 'Summary', 'Scoring Status'
       ]
     ];
@@ -156,8 +154,6 @@ export default function Dashboard() {
         attendee.linkedinData?.about || '',
         attendee.scrapingStatus || '',
         attendee.overall_score?.toString() || '',
-        attendee.technical_skill?.toString() || '',
-        attendee.collaboration?.toString() || '',
         attendee.hackathons_won?.toString() || '',
         attendee.technical_skill_summary || '',
         attendee.collaboration_summary || '',
@@ -291,10 +287,8 @@ export default function Dashboard() {
                   <th>Events</th>
                   <th>LinkedIn</th>
                   <th>Status</th>
-                  <th>Overall</th>
-                  <th>Tech</th>
-                  <th>Collab</th>
-                  <th>Hackathons</th>
+                  <th>Overall Score</th>
+                  <th>Hackathons Won</th>
                   <th>Tech Summary</th>
                   <th>Collab Summary</th>
                   <th>Summary</th>
@@ -360,19 +354,9 @@ export default function Dashboard() {
                       {/* Scoring columns */}
                       <td className={styles.scoreCell}>
                         {attendee.overall_score !== null && attendee.overall_score !== undefined ? (
-                          <span className={styles.scoreValue}>{attendee.overall_score}</span>
+                          <span className={styles.scoreValue}>{attendee.overall_score}/100</span>
                         ) : attendee.scoringStatus === 'pending' ? (
                           <span className={styles.loading}>...</span>
-                        ) : '-'}
-                      </td>
-                      <td className={styles.scoreCell}>
-                        {attendee.technical_skill !== null && attendee.technical_skill !== undefined ? (
-                          <span className={styles.scoreValue}>{attendee.technical_skill}</span>
-                        ) : '-'}
-                      </td>
-                      <td className={styles.scoreCell}>
-                        {attendee.collaboration !== null && attendee.collaboration !== undefined ? (
-                          <span className={styles.scoreValue}>{attendee.collaboration}</span>
                         ) : '-'}
                       </td>
                       <td>
@@ -400,7 +384,7 @@ export default function Dashboard() {
                     {/* Expanded Row Details */}
                     {expandedRows.has(index) && attendee.linkedinData && (
                       <tr key={`${index}-expanded`} className={styles.expandedContent}>
-                        <td colSpan={15}>
+                        <td colSpan={13}>
                           <div className={styles.detailsContainer}>
                             {/* About */}
                             {attendee.linkedinData.about && (

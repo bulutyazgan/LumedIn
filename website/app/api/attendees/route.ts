@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { scrapeMultipleProfiles, LinkedInProfile, ScrapedResult } from '@/lib/linkedinScraper';
-import { scoreCandidate, HackathonEvaluation, ScoringResult } from '@/lib/openaiScorer';
+import { scoreMultipleCandidatesParallel, HackathonEvaluation, ScoringResult } from '@/lib/openaiScorer';
 
 // Extended attendee interface with LinkedIn data and OpenAI scoring
 interface EnrichedAttendee {
@@ -20,11 +20,9 @@ interface EnrichedAttendee {
 
   // OpenAI scoring data
   hackathons_won: number | string | null;
-  technical_skill: number | null;
-  technical_skill_summary: string | null;
-  collaboration: number | null;
-  collaboration_summary: string | null;
   overall_score: number | null;
+  technical_skill_summary: string | null;
+  collaboration_summary: string | null;
   summary: string | null;
   scoringStatus: 'pending' | 'completed' | 'failed' | 'skipped';
   scoringError?: string;
@@ -71,6 +69,10 @@ let storedAttendees: StoredData = {
   },
 };
 
+// Track if scraping is currently in progress to prevent duplicate jobs
+let isScrapingInProgress = false;
+let isScoringInProgress = false;
+
 // CORS headers
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -101,11 +103,9 @@ export async function POST(request: NextRequest) {
       scrapingStatus: attendee.linkedin ? 'pending' : 'no_linkedin',
       // Initialize scoring fields
       hackathons_won: null,
-      technical_skill: null,
-      technical_skill_summary: null,
-      collaboration: null,
-      collaboration_summary: null,
       overall_score: null,
+      technical_skill_summary: null,
+      collaboration_summary: null,
       summary: null,
       scoringStatus: 'pending',
     }));
@@ -138,17 +138,22 @@ export async function POST(request: NextRequest) {
     console.log(`Starting LinkedIn scraping for ${linkedinCount} profiles...`);
 
     // Start background LinkedIn scraping (don't await)
-    if (linkedinCount > 0) {
+    // Only start if not already in progress to prevent duplicate API calls
+    if (linkedinCount > 0 && !isScrapingInProgress) {
+      isScrapingInProgress = true;
       startLinkedInScraping().catch(error => {
         console.error('Background LinkedIn scraping failed:', error);
+        isScrapingInProgress = false; // Reset on error
       });
+    } else if (isScrapingInProgress) {
+      console.log('⚠️ LinkedIn scraping already in progress, skipping duplicate job');
     }
 
     return NextResponse.json({
       success: true,
       message: `Successfully stored ${data.attendees.length} attendees`,
       count: data.attendees.length,
-      linkedinScrapingStarted: linkedinCount > 0,
+      linkedinScrapingStarted: linkedinCount > 0 && !isScrapingInProgress,
       linkedinProfilesQueued: linkedinCount,
     }, { headers: corsHeaders });
 
@@ -163,6 +168,7 @@ export async function POST(request: NextRequest) {
 
 export async function GET() {
   // Return stored attendees for the dashboard
+  console.log(`📊 GET /api/attendees - Returning ${storedAttendees.attendees.length} attendees`);
   return NextResponse.json(storedAttendees, { headers: corsHeaders });
 }
 
@@ -234,19 +240,27 @@ async function startLinkedInScraping() {
   console.log('LinkedIn scraping completed!');
   console.log(`Results: ${storedAttendees.scrapingProgress.completed} successful, ${storedAttendees.scrapingProgress.failed} failed`);
 
+  // Reset scraping flag now that we're done
+  isScrapingInProgress = false;
+
   // Start OpenAI scoring after LinkedIn scraping completes
   console.log('Starting OpenAI scoring...');
-  startOpenAIScoring().catch(error => {
-    console.error('Background OpenAI scoring failed:', error);
-  });
+  if (!isScoringInProgress) {
+    isScoringInProgress = true;
+    startOpenAIScoring().catch(error => {
+      console.error('Background OpenAI scoring failed:', error);
+      isScoringInProgress = false; // Reset on error
+    });
+  }
 }
 
 /**
- * Background function to score candidates with OpenAI
+ * Background function to score candidates with OpenAI in parallel
  * Runs after LinkedIn scraping completes
  */
 async function startOpenAIScoring() {
   const apiKey = process.env.OPENAI_API_KEY;
+  const MAX_CONCURRENT = 10; // Adjust based on OpenAI tier
 
   if (!apiKey) {
     console.error('OPENAI_API_KEY not found in environment variables');
@@ -263,11 +277,15 @@ async function startOpenAIScoring() {
   }
 
   // Find attendees with successfully scraped LinkedIn data
-  const attendeesToScore: Array<{ attendee: EnrichedAttendee; index: number }> = [];
+  const attendeesToScore: Array<{ attendee: EnrichedAttendee; index: number; id: string }> = [];
 
   storedAttendees.attendees.forEach((attendee, index) => {
     if (attendee.scrapingStatus === 'completed' && attendee.linkedinData && attendee.scoringStatus === 'pending') {
-      attendeesToScore.push({ attendee, index });
+      attendeesToScore.push({
+        attendee,
+        index,
+        id: `${index}-${attendee.name}`
+      });
     } else if (attendee.scrapingStatus !== 'completed' && attendee.scoringStatus === 'pending') {
       // Skip scoring for attendees without LinkedIn data
       attendee.scoringStatus = 'skipped';
@@ -281,57 +299,56 @@ async function startOpenAIScoring() {
     return;
   }
 
-  console.log(`Scoring ${attendeesToScore.length} candidates with OpenAI...`);
+  console.log(`🚀 Scoring ${attendeesToScore.length} candidates with OpenAI (${MAX_CONCURRENT} concurrent)...`);
 
-  // Score each candidate sequentially
-  for (let i = 0; i < attendeesToScore.length; i++) {
-    const { attendee, index } = attendeesToScore[i];
+  // Prepare profiles for parallel scoring
+  const profiles = attendeesToScore.map(({ attendee, id }) => ({
+    id,
+    data: attendee.linkedinData!
+  }));
 
-    console.log(`Scoring ${i + 1}/${attendeesToScore.length}: ${attendee.name}`);
+  // Score all candidates in parallel
+  const results = await scoreMultipleCandidatesParallel(
+    profiles,
+    MAX_CONCURRENT,
+    (id, result) => {
+      // Find the attendee for this ID
+      const item = attendeesToScore.find(a => a.id === id);
+      if (!item) return;
 
-    try {
-      const result: ScoringResult = await scoreCandidate(attendee.linkedinData!);
+      const { attendee } = item;
 
       if (result.success && result.evaluation) {
         // Successfully scored - update with all scoring fields
         const evaluation = result.evaluation;
         attendee.hackathons_won = evaluation.hackathons_won;
-        attendee.technical_skill = evaluation.technical_skill;
-        attendee.technical_skill_summary = evaluation.technical_skill_summary;
-        attendee.collaboration = evaluation.collaboration;
-        attendee.collaboration_summary = evaluation.collaboration_summary;
         attendee.overall_score = evaluation.overall_score;
+        attendee.technical_skill_summary = evaluation.technical_skill_summary;
+        attendee.collaboration_summary = evaluation.collaboration_summary;
         attendee.summary = evaluation.summary;
         attendee.scoringStatus = 'completed';
 
         storedAttendees.scoringProgress.completed++;
-        console.log(`✓ Scored ${attendee.name}: ${evaluation.overall_score}/100 (Tech: ${evaluation.technical_skill}, Collab: ${evaluation.collaboration})`);
+        storedAttendees.scoringProgress.pending--;
+        console.log(`✓ Scored ${attendee.name}: ${evaluation.overall_score}/100`);
       } else {
         // Failed to score
         attendee.scoringStatus = 'failed';
         attendee.scoringError = result.error || 'Unknown scoring error';
         storedAttendees.scoringProgress.failed++;
+        storedAttendees.scoringProgress.pending--;
         console.log(`✗ Failed to score ${attendee.name}: ${result.error}`);
       }
-    } catch (error) {
-      attendee.scoringStatus = 'failed';
-      attendee.scoringError = error instanceof Error ? error.message : 'Unknown error';
-      storedAttendees.scoringProgress.failed++;
-      console.log(`✗ Error scoring ${attendee.name}:`, error);
     }
+  );
 
-    storedAttendees.scoringProgress.pending--;
-
-    // Rate limiting: 1 second delay between API calls (except after the last one)
-    if (i < attendeesToScore.length - 1) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    }
-  }
-
-  console.log('OpenAI scoring completed!');
+  console.log('✅ OpenAI scoring completed!');
   console.log(
     `Results: ${storedAttendees.scoringProgress.completed} scored, ` +
     `${storedAttendees.scoringProgress.failed} failed, ` +
     `${storedAttendees.scoringProgress.skipped} skipped`
   );
+
+  // Reset scoring flag now that we're done
+  isScoringInProgress = false;
 }

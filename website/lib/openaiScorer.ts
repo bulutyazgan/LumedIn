@@ -11,11 +11,9 @@ const client = apiKey ? new OpenAI({ apiKey }) : null;
 // TypeScript interface matching Python's HackathonEvaluation Pydantic model
 export interface HackathonEvaluation {
   hackathons_won: number | string; // number or "unavailable"
-  technical_skill: number; // 1-100
-  technical_skill_summary: string;
-  collaboration: number; // 1-100
-  collaboration_summary: string;
   overall_score: number; // 1-100
+  technical_skill_summary: string;
+  collaboration_summary: string;
   summary: string;
 }
 
@@ -181,19 +179,23 @@ Profile:
 Extract and score:
 
 1. Hackathons won: count if mentioned, otherwise use "unavailable"
-2. Scores (1-100 scale with percentile calibration):
-   - Technical Skill: Depth of technical projects, languages, frameworks, system design
-   - Collaboration: Teamwork indicators, leadership roles, group projects, communication ability
-   - Overall: Holistic hackathon readiness combining technical + collaboration + execution track record
 
-CALIBRATION: Population of university students where median = 50, top 10% = 80+, exceptional = 90+. Distribute scores across 40-70 range for most candidates. Only truly exceptional profiles score 85+. Avoid clustering around 70-80.
+2. Overall Score (1-100 scale with percentile calibration):
+   - Holistic hackathon readiness combining technical skill + collaboration + execution track record
+   - Consider: Technical projects, languages, frameworks, system design, teamwork, leadership, communication
+   - CALIBRATION: Population of university students where median = 50, top 10% = 80+, exceptional = 90+
+   - Distribute scores across 40-70 range for most candidates
+   - Only truly exceptional profiles score 85+. Avoid clustering around 70-80
 
-3. Summary: If overall_score > 75 or under 20, write one paragraph (3-4 sentences) summarizing interests and background. Otherwise, leave empty string.`;
+3. Summaries (only if overall_score > 75 or under 20, otherwise empty strings):
+   - technical_skill_summary: Paragraph about technical abilities and projects
+   - collaboration_summary: Paragraph about teamwork and collaboration abilities
+   - summary: Overall paragraph summarizing interests and background`;
 
     const response = await client.chat.completions.create({
-      model: 'gpt-5-nano',
+      model: 'gpt-4o-mini', // Using faster model - change to 'gpt-4o' for better quality
       messages: [{ role: 'user', content: prompt }],
-      // Note: gpt-5-nano only supports temperature: 1 (default)
+      temperature: 0.3, // Lower temperature for more consistent scoring
       response_format: {
         type: 'json_schema',
         json_schema: {
@@ -206,44 +208,30 @@ CALIBRATION: Population of university students where median = 50, top 10% = 80+,
                 type: ['number', 'string'],
                 description: "Number of hackathons won, or 'unavailable' if not mentioned"
               },
-              technical_skill: {
-                type: 'number',
-                minimum: 1,
-                maximum: 100,
-                description: 'Technical skill score 1-100'
-              },
-              technical_skill_summary: {
-                type: 'string',
-                description: 'Paragraph summary of technical skills if overall_score > 75 or under 20, otherwise empty string'
-              },
-              collaboration: {
-                type: 'number',
-                minimum: 1,
-                maximum: 100,
-                description: 'Collaboration score 1-100'
-              },
-              collaboration_summary: {
-                type: 'string',
-                description: 'Paragraph summary if overall_score > 75 or under 20, otherwise empty string'
-              },
               overall_score: {
                 type: 'number',
                 minimum: 1,
                 maximum: 100,
                 description: 'Overall hackathon readiness score 1-100'
               },
+              technical_skill_summary: {
+                type: 'string',
+                description: 'Paragraph summary of technical skills if overall_score > 75 or under 20, otherwise empty string'
+              },
+              collaboration_summary: {
+                type: 'string',
+                description: 'Paragraph summary of collaboration ability if overall_score > 75 or under 20, otherwise empty string'
+              },
               summary: {
                 type: 'string',
-                description: 'Paragraph summary if overall_score > 75 or under 20, otherwise empty string'
+                description: 'Overall paragraph summary if overall_score > 75 or under 20, otherwise empty string'
               }
             },
             required: [
               'hackathons_won',
-              'technical_skill',
-              'technical_skill_summary',
-              'collaboration',
-              'collaboration_summary',
               'overall_score',
+              'technical_skill_summary',
+              'collaboration_summary',
               'summary'
             ],
             additionalProperties: false
@@ -276,7 +264,38 @@ CALIBRATION: Population of university students where median = 50, top 10% = 80+,
 }
 
 /**
- * Scores multiple candidates with rate limiting
+ * Scores multiple candidates in parallel with controlled concurrency
+ * Uses semaphore-like pattern with Promise.all for efficient batching
+ */
+export async function scoreMultipleCandidatesParallel(
+  profiles: Array<{ id: string; data: LinkedInProfile }>,
+  maxConcurrent: number = 10,
+  onProgress?: (id: string, result: ScoringResult) => void
+): Promise<Map<string, ScoringResult>> {
+  const results = new Map<string, ScoringResult>();
+
+  // Process in batches of maxConcurrent
+  for (let i = 0; i < profiles.length; i += maxConcurrent) {
+    const batch = profiles.slice(i, i + maxConcurrent);
+
+    // Process all profiles in this batch concurrently
+    await Promise.all(
+      batch.map(async (profile) => {
+        const result = await scoreCandidate(profile.data);
+        results.set(profile.id, result);
+
+        if (onProgress) {
+          onProgress(profile.id, result);
+        }
+      })
+    );
+  }
+
+  return results;
+}
+
+/**
+ * Scores multiple candidates sequentially (legacy, for compatibility)
  */
 export async function scoreMultipleCandidates(
   profiles: Array<{ id: string; data: LinkedInProfile }>,

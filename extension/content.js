@@ -288,8 +288,8 @@
       const result = await response.json();
       console.log('✓ Data sent successfully:', result);
 
-      // Wait a moment for the server to finish storing data
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Wait for server to fully process the request before opening dashboard
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
       // Open dashboard in new tab
       window.open('http://localhost:3000', '_blank');
