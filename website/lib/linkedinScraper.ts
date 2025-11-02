@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { readFromCache, writeToCache, ensureCacheDirectory } from './linkedinCache';
 
 // LinkedIn data structure matching sample_output.json
 export interface LinkedInProfile {
@@ -65,7 +66,36 @@ export async function scrapeLinkedInProfile(
     };
   }
 
+  // Check if cache mode is enabled
+  const useCacheMode = process.env.USE_LINKEDIN_CACHE === 'true';
+
+  // Try to read from cache first
+  if (useCacheMode) {
+    console.log(`🔍 Cache mode ON - checking cache for: ${url}`);
+    const cached = readFromCache(url);
+
+    if (cached) {
+      // Cache hit - return cached data
+      console.log(`✅ Using cached data for: ${url}`);
+      return {
+        url,
+        success: true,
+        data: cached.profile,
+      };
+    }
+
+    // Cache miss - skip API call in cache mode
+    console.log(`⚠️  Cache miss - skipping API call for: ${url}`);
+    return {
+      url,
+      success: false,
+      error: 'No cached data available (cache mode enabled)',
+    };
+  }
+
+  // Cache mode OFF - make API call as normal
   try {
+    console.log(`🌐 Live mode - scraping: ${url}`);
     const response = await axios.get('https://api.scrapingdog.com/profile', {
       params: {
         api_key: apiKey,
@@ -79,6 +109,9 @@ export async function scrapeLinkedInProfile(
     // Extract only the fields we need
     const rawData = Array.isArray(response.data) ? response.data[0] : response.data;
     const extractedData = extractRelevantFields(rawData);
+
+    // Write successful scrape to cache
+    writeToCache(url, extractedData);
 
     return {
       url,

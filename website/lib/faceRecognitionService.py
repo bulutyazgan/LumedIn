@@ -186,33 +186,48 @@ class FaceRecognitionService:
 
                 print(f"[{index + 1}/{len(profiles)}] Comparing faces with {profile.get('name')}...", file=sys.stderr)
 
-                # Use DeepFace.verify to compare faces with local file
-                result = DeepFace.verify(
-                    img1_path=target_image_path,
-                    img2_path=str(temp_photo_path),  # Now using local file!
-                    model_name=self.model_name,
-                    distance_metric=self.distance_metric,
-                    enforce_detection=False  # More lenient for better matching
-                )
+                try:
+                    # Use DeepFace.verify to compare faces with local file
+                    result = DeepFace.verify(
+                        img1_path=target_image_path,
+                        img2_path=str(temp_photo_path),  # Now using local file!
+                        model_name=self.model_name,
+                        distance_metric=self.distance_metric,
+                        enforce_detection=False,  # More lenient for better matching
+                        detector_backend='skip'  # Skip face detection preprocessing
+                    )
 
-                distance = result['distance']
+                    distance = result['distance']
 
-                print(f"[{index + 1}/{len(profiles)}] Distance: {distance:.4f}, Verified: {result['verified']}", file=sys.stderr)
+                    print(f"[{index + 1}/{len(profiles)}] Distance: {distance:.4f}, Verified: {result['verified']}", file=sys.stderr)
 
-                # Track the closest match
-                if distance < best_distance:
-                    best_distance = distance
-                    best_match = {
-                        'matched_profile': profile,
-                        'confidence': 1 - distance,  # Convert distance to confidence
-                        'distance': distance,
-                        'verified': result['verified']
-                    }
-                    print(f"✓ New best match: {profile.get('name')} (confidence: {(1-distance)*100:.1f}%)", file=sys.stderr)
+                    # Track the closest match
+                    if distance < best_distance:
+                        best_distance = distance
+                        best_match = {
+                            'matched_profile': profile,
+                            'confidence': 1 - distance,  # Convert distance to confidence
+                            'distance': distance,
+                            'verified': result['verified']
+                        }
+                        print(f"✓ New best match: {profile.get('name')} (confidence: {(1-distance)*100:.1f}%)", file=sys.stderr)
+
+                except ValueError as e:
+                    # Face detection failed for this specific photo
+                    error_msg = str(e)
+                    if "Face could not be detected" in error_msg or "Face could not be found" in error_msg:
+                        print(f"[{index + 1}/{len(profiles)}] ⚠️  No face detected in photo for {profile.get('name')}, skipping...", file=sys.stderr)
+                    else:
+                        print(f"[{index + 1}/{len(profiles)}] ValueError: {error_msg}", file=sys.stderr)
+                    continue
+                except Exception as e:
+                    # Other errors during verification
+                    print(f"[{index + 1}/{len(profiles)}] Verification error for {profile.get('name')}: {str(e)}", file=sys.stderr)
+                    continue
 
             except Exception as e:
-                # Skip this profile if face verification fails
-                print(f"Error verifying face for {profile.get('name')}: {str(e)}", file=sys.stderr)
+                # Download or general errors
+                print(f"Error processing {profile.get('name')}: {str(e)}", file=sys.stderr)
                 continue
 
         # Clean up downloaded profile photos
