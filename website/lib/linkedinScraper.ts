@@ -90,7 +90,7 @@ export async function scrapeLinkedInProfile(
         id: url,
         premium: 'true',
       },
-      timeout: 30000, // 30 second timeout
+      timeout: 50000, // 30 second timeout
     });
 
     // Extract only the fields we need
